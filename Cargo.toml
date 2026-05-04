@@ -1,0 +1,23 @@
+[package]
+name = "ds-check"
+version = "0.1.0"
+edition = "2024"
+description = "CLI tool for checking DeepSeek platform usage and balance"
+license = "MIT"
+repository = "https://github.com/omega/ds-check"
+keywords = ["deepseek", "cli", "usage", "api"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.13", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+dirs = "6"
+chrono = "0.4"
+
+[profile.release]
+strip = true
+lto = true

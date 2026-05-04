@@ -1,0 +1,148 @@
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Locale {
+    ZhCN,
+    ZhTW,
+    EnUS,
+    JaJP,
+}
+
+impl Locale {
+    pub fn from_str(s: &str) -> Self {
+        let lower = s.to_lowercase();
+        if lower.starts_with("zh_cn") || lower.starts_with("zh-cn") || lower == "zh" || lower.starts_with("zh-hans") {
+            Self::ZhCN
+        } else if lower.starts_with("zh_tw") || lower.starts_with("zh-tw") || lower.starts_with("zh_hk") || lower.starts_with("zh-hant") {
+            Self::ZhTW
+        } else if lower.starts_with("ja") || lower.starts_with("jp") {
+            Self::JaJP
+        } else {
+            Self::EnUS
+        }
+    }
+
+    pub fn detect() -> Self {
+        std::env::var("LANG")
+            .ok()
+            .map(|lang| Self::from_str(&lang))
+            .unwrap_or(Self::EnUS)
+    }
+
+    fn messages(&self) -> HashMap<&'static str, &'static str> {
+        match self {
+            Self::ZhCN => HashMap::from([
+                ("no_token", "未检测到登录凭据"),
+                ("auth_hint", "请先登录: ds-check auth <你的Token>"),
+                ("enter_token", "请输入 DeepSeek API Token: "),
+                ("auth_success", "登录成功: {}"),
+                ("invalid_token", "Token 验证失败，请检查后重试"),
+                ("token_saved", "Token 已保存到 {}"),
+                ("header", "DeepSeek 使用量"),
+                ("user", "用户"),
+                ("balance", "充值余额"),
+                ("monthly_cost", "本月消费"),
+                ("api_requests", "API 请求次数"),
+                ("tokens", "Tokens"),
+                ("model", "模型"),
+                ("date", "日期"),
+                ("prompt_tokens", "输入 Tokens"),
+                ("cache_hit_tokens", "缓存命中"),
+                ("cache_miss_tokens", "缓存未命中"),
+                ("response_tokens", "输出 Tokens"),
+                ("requests", "请求次数"),
+                ("cost", "费用"),
+                ("total", "合计"),
+                ("no_data", "暂无数据"),
+                ("network_error", "网络请求失败: {}"),
+                ("config_load_error", "加载配置文件失败: {}"),
+            ]),
+            Self::ZhTW => HashMap::from([
+                ("no_token", "未檢測到登錄憑據"),
+                ("auth_hint", "請先登錄: ds-check auth <你的Token>"),
+                ("enter_token", "請輸入 DeepSeek API Token: "),
+                ("auth_success", "登錄成功: {}"),
+                ("invalid_token", "Token 驗證失敗，請檢查後重試"),
+                ("token_saved", "Token 已儲存至 {}"),
+                ("header", "DeepSeek 使用量"),
+                ("user", "使用者"),
+                ("balance", "儲值餘額"),
+                ("monthly_cost", "本月消費"),
+                ("api_requests", "API 請求次數"),
+                ("tokens", "Tokens"),
+                ("model", "模型"),
+                ("date", "日期"),
+                ("prompt_tokens", "輸入 Tokens"),
+                ("cache_hit_tokens", "快取命中"),
+                ("cache_miss_tokens", "快取未命中"),
+                ("response_tokens", "輸出 Tokens"),
+                ("requests", "請求次數"),
+                ("cost", "費用"),
+                ("total", "合計"),
+                ("no_data", "暫無數據"),
+                ("network_error", "網路請求失敗: {}"),
+                ("config_load_error", "載入設定檔失敗: {}"),
+            ]),
+            Self::EnUS => HashMap::from([
+                ("no_token", "No login credentials found"),
+                ("auth_hint", "Please login first: ds-check auth <your-token>"),
+                ("enter_token", "Enter your DeepSeek API token: "),
+                ("auth_success", "Logged in as: {}"),
+                ("invalid_token", "Token validation failed, please check and retry"),
+                ("token_saved", "Token saved to {}"),
+                ("header", "DeepSeek Usage"),
+                ("user", "User"),
+                ("balance", "Balance"),
+                ("monthly_cost", "Monthly Cost"),
+                ("api_requests", "API Requests"),
+                ("tokens", "Tokens"),
+                ("model", "Model"),
+                ("date", "Date"),
+                ("prompt_tokens", "Prompt Tokens"),
+                ("cache_hit_tokens", "Cache Hit"),
+                ("cache_miss_tokens", "Cache Miss"),
+                ("response_tokens", "Response Tokens"),
+                ("requests", "Requests"),
+                ("cost", "Cost"),
+                ("total", "Total"),
+                ("no_data", "No data available"),
+                ("network_error", "Network request failed: {}"),
+                ("config_load_error", "Failed to load config: {}"),
+            ]),
+            Self::JaJP => HashMap::from([
+                ("no_token", "ログイン情報が見つかりません"),
+                ("auth_hint", "まずログインしてください: ds-check auth <トークン>"),
+                ("enter_token", "DeepSeek API トークンを入力してください: "),
+                ("auth_success", "ログイン成功: {}"),
+                ("invalid_token", "トークンの検証に失敗しました。確認して再試行してください"),
+                ("token_saved", "トークンを {} に保存しました"),
+                ("header", "DeepSeek 使用量"),
+                ("user", "ユーザー"),
+                ("balance", "残高"),
+                ("monthly_cost", "今月の利用料金"),
+                ("api_requests", "APIリクエスト数"),
+                ("tokens", "トークン"),
+                ("model", "モデル"),
+                ("date", "日付"),
+                ("prompt_tokens", "入力トークン"),
+                ("cache_hit_tokens", "キャッシュヒット"),
+                ("cache_miss_tokens", "キャッシュミス"),
+                ("response_tokens", "出力トークン"),
+                ("requests", "リクエスト数"),
+                ("cost", "費用"),
+                ("total", "合計"),
+                ("no_data", "データがありません"),
+                ("network_error", "ネットワークエラー: {}"),
+                ("config_load_error", "設定の読み込みに失敗: {}"),
+            ]),
+        }
+    }
+
+    pub fn t(&self, key: &str) -> String {
+        self.messages()
+            .get(key)
+            .copied()
+            .unwrap_or(key)
+            .to_string()
+    }
+}
