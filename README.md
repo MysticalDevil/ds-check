@@ -2,6 +2,8 @@
 
 A CLI tool for checking DeepSeek platform usage, balance, and API consumption.
 
+[中文文档](README.zh_CN.md)
+
 ## Features
 
 - View account balance and monthly costs
