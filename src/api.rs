@@ -93,10 +93,7 @@ pub struct DaySummary {
     pub cost: f64,
 }
 
-async fn api_get<T: for<'de> Deserialize<'de>>(
-    token: &str,
-    path: &str,
-) -> anyhow::Result<T> {
+async fn api_get<T: for<'de> Deserialize<'de>>(token: &str, path: &str) -> anyhow::Result<T> {
     let url = format!("{}{}", BASE_URL, path);
     let client = reqwest::Client::new();
 
@@ -153,11 +150,7 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
     let cost_data = cost.first();
     let mut result: Vec<DaySummary> = Vec::new();
 
-    let models: Vec<&str> = amount
-        .total
-        .iter()
-        .map(|m| m.model.as_str())
-        .collect();
+    let models: Vec<&str> = amount.total.iter().map(|m| m.model.as_str()).collect();
 
     for (day_idx, day) in amount.days.iter().enumerate() {
         for (model_idx, model_usage) in day.data.iter().enumerate() {
@@ -172,13 +165,17 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
                     .get(day_idx)
                     .and_then(|d| d.data.get(model_idx))
                     .map(|mu| {
-                        let c: u64 = mu.usage.iter().map(|u| {
-                            if u.usage_type != "REQUEST" {
-                                (u.amount.parse::<f64>().unwrap_or(0.0) * 100.0) as u64
-                            } else {
-                                0
-                            }
-                        }).sum();
+                        let c: u64 = mu
+                            .usage
+                            .iter()
+                            .map(|u| {
+                                if u.usage_type != "REQUEST" {
+                                    (u.amount.parse::<f64>().unwrap_or(0.0) * 100.0) as u64
+                                } else {
+                                    0
+                                }
+                            })
+                            .sum();
                         c
                     })
                     .unwrap_or(0)
@@ -192,7 +189,10 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
 
             result.push(DaySummary {
                 date: day.date.clone(),
-                model: models.get(model_idx).map(|s| s.to_string()).unwrap_or_default(),
+                model: models
+                    .get(model_idx)
+                    .map(|s| s.to_string())
+                    .unwrap_or_default(),
                 prompt_tokens: prompt,
                 cache_hit_tokens: cache_hit,
                 cache_miss_tokens: cache_miss,

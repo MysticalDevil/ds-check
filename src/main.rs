@@ -1,12 +1,15 @@
 mod api;
 mod auth;
 mod i18n;
+mod mock;
 mod output;
+mod util;
 
 use anyhow::Context;
 use chrono::Datelike;
 use clap::{Parser, Subcommand};
 use i18n::Locale;
+use output::RenderMode;
 use std::io::Write;
 
 #[derive(Parser)]
@@ -14,7 +17,7 @@ use std::io::Write;
     name = "ds-check",
     version,
     about = "DeepSeek platform usage CLI tool",
-    after_help = "Examples:\n  ds-check                  Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check --json           Output as JSON"
+    after_help = "Examples:\n  ds-check                  Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
 )]
 struct Cli {
     #[arg(short, long, global = true, help = "Output as JSON")]
@@ -51,10 +54,22 @@ enum Commands {
 
 fn get_locale(cli: &Cli) -> Locale {
     if let Some(ref l) = cli.locale {
-        Locale::from_str(l)
-    } else {
-        Locale::detect()
+        return Locale::from_str(l);
     }
+    if let Ok(l) = std::env::var("DSCHECK_LOCALE") {
+        return Locale::from_str(&l);
+    }
+    Locale::detect()
+}
+
+fn get_render_mode() -> RenderMode {
+    RenderMode::from_env()
+}
+
+fn is_mock() -> bool {
+    std::env::var("DSCHECK_MOCK")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 fn auth_config_path() -> String {
@@ -65,20 +80,25 @@ fn auth_config_path() -> String {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let locale = get_locale(&cli);
+    let render_mode = get_render_mode();
 
     match &cli.command {
         Some(Commands::Auth { token }) => {
             cmd_auth(token, &locale).await?;
         }
-        Some(Commands::Usage {
-            month,
-            year,
-            model,
-        }) => {
-            cmd_usage(*month, *year, model.as_deref(), cli.json, &locale).await?;
+        Some(Commands::Usage { month, year, model }) => {
+            cmd_usage(
+                *month,
+                *year,
+                model.as_deref(),
+                cli.json,
+                &locale,
+                render_mode,
+            )
+            .await?;
         }
         None => {
-            cmd_summary(cli.json, &locale).await?;
+            cmd_summary(cli.json, &locale, render_mode).await?;
         }
     }
 
@@ -101,41 +121,49 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
         anyhow::bail!(locale.t("invalid_token"));
     }
 
-    let user = api::get_current_user(&token)
-        .await
-        .context(locale.t("invalid_token"))?;
+    let (nickname, email, currency) = if is_mock() {
+        (
+            "MockUser".to_string(),
+            "mock@example.com".to_string(),
+            "CNY".to_string(),
+        )
+    } else {
+        let user = api::get_current_user(&token)
+            .await
+            .context(locale.t("invalid_token"))?;
+        (user.id_profile.name, user.email, user.currency)
+    };
 
     let config = auth::AuthConfig {
-        token: token.clone(),
-        nickname: user.id_profile.name,
-        email: user.email,
-        currency: user.currency,
+        token,
+        nickname: nickname.clone(),
+        email,
+        currency,
     };
 
     auth::save(&config)?;
+    println!("{}", locale.t("auth_success").replace("{}", &nickname));
     println!(
         "{}",
-        locale.t("auth_success").replace("{}", &config.nickname)
+        locale.t("token_saved").replace("{}", &auth_config_path())
     );
-    println!("{}", locale.t("token_saved").replace("{}", &auth_config_path()));
 
     Ok(())
 }
 
-async fn cmd_summary(json: bool, locale: &Locale) -> anyhow::Result<()> {
+async fn cmd_summary(json: bool, locale: &Locale, render_mode: RenderMode) -> anyhow::Result<()> {
     let config = auth::load()
-        .ok_or_else(|| {
-            anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint"))
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
-    let now = chrono::Local::now();
-    let month = now.month();
-    let year = now.year();
-
-    let (summary, amount) = tokio::try_join!(
-        api::get_user_summary(&config.token),
-        api::get_usage_amount(&config.token, month, year),
-    )?;
+    let (summary, amount) = if is_mock() {
+        (mock::mock_user_summary(), mock::mock_usage_amount())
+    } else {
+        let now = chrono::Local::now();
+        tokio::try_join!(
+            api::get_user_summary(&config.token),
+            api::get_usage_amount(&config.token, now.month(), now.year()),
+        )?
+    };
 
     let total_requests: u64 = amount
         .total
@@ -145,8 +173,14 @@ async fn cmd_summary(json: bool, locale: &Locale) -> anyhow::Result<()> {
         .filter_map(|u| u.amount.parse::<u64>().ok())
         .sum();
 
-    output::print_summary(&summary, total_requests, &config.nickname, json, *locale);
-
+    output::print_summary(
+        &summary,
+        total_requests,
+        &config.nickname,
+        json,
+        *locale,
+        render_mode,
+    );
     Ok(())
 }
 
@@ -156,23 +190,25 @@ async fn cmd_usage(
     model: Option<&str>,
     json: bool,
     locale: &Locale,
+    render_mode: RenderMode,
 ) -> anyhow::Result<()> {
     let config = auth::load()
-        .ok_or_else(|| {
-            anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint"))
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
     let now = chrono::Local::now();
     let month = month.unwrap_or(now.month());
     let year = year.unwrap_or(now.year());
 
-    let (amount, cost) = tokio::try_join!(
-        api::get_usage_amount(&config.token, month, year),
-        api::get_usage_cost(&config.token, month, year),
-    )?;
+    let (amount, cost) = if is_mock() {
+        (mock::mock_usage_amount(), mock::mock_usage_cost())
+    } else {
+        tokio::try_join!(
+            api::get_usage_amount(&config.token, month, year),
+            api::get_usage_cost(&config.token, month, year),
+        )?
+    };
 
     let days = api::merge_usage(&amount, &cost);
-    output::print_usage(&days, model, json, *locale);
-
+    output::print_usage(&days, model, json, *locale, render_mode);
     Ok(())
 }

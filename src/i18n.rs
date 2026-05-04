@@ -11,9 +11,17 @@ pub enum Locale {
 impl Locale {
     pub fn from_str(s: &str) -> Self {
         let lower = s.to_lowercase();
-        if lower.starts_with("zh_cn") || lower.starts_with("zh-cn") || lower == "zh" || lower.starts_with("zh-hans") {
+        if lower.starts_with("zh_cn")
+            || lower.starts_with("zh-cn")
+            || lower == "zh"
+            || lower.starts_with("zh-hans")
+        {
             Self::ZhCN
-        } else if lower.starts_with("zh_tw") || lower.starts_with("zh-tw") || lower.starts_with("zh_hk") || lower.starts_with("zh-hant") {
+        } else if lower.starts_with("zh_tw")
+            || lower.starts_with("zh-tw")
+            || lower.starts_with("zh_hk")
+            || lower.starts_with("zh-hant")
+        {
             Self::ZhTW
         } else if lower.starts_with("ja") || lower.starts_with("jp") {
             Self::JaJP
@@ -85,10 +93,16 @@ impl Locale {
             ]),
             Self::EnUS => HashMap::from([
                 ("no_token", "No login credentials found"),
-                ("auth_hint", "Please login first: ds-check auth <your-token>"),
+                (
+                    "auth_hint",
+                    "Please login first: ds-check auth <your-token>",
+                ),
                 ("enter_token", "Enter your DeepSeek API token: "),
                 ("auth_success", "Logged in as: {}"),
-                ("invalid_token", "Token validation failed, please check and retry"),
+                (
+                    "invalid_token",
+                    "Token validation failed, please check and retry",
+                ),
                 ("token_saved", "Token saved to {}"),
                 ("header", "DeepSeek Usage"),
                 ("user", "User"),
@@ -111,10 +125,16 @@ impl Locale {
             ]),
             Self::JaJP => HashMap::from([
                 ("no_token", "ログイン情報が見つかりません"),
-                ("auth_hint", "まずログインしてください: ds-check auth <トークン>"),
+                (
+                    "auth_hint",
+                    "まずログインしてください: ds-check auth <トークン>",
+                ),
                 ("enter_token", "DeepSeek API トークンを入力してください: "),
                 ("auth_success", "ログイン成功: {}"),
-                ("invalid_token", "トークンの検証に失敗しました。確認して再試行してください"),
+                (
+                    "invalid_token",
+                    "トークンの検証に失敗しました。確認して再試行してください",
+                ),
                 ("token_saved", "トークンを {} に保存しました"),
                 ("header", "DeepSeek 使用量"),
                 ("user", "ユーザー"),
@@ -139,10 +159,6 @@ impl Locale {
     }
 
     pub fn t(&self, key: &str) -> String {
-        self.messages()
-            .get(key)
-            .copied()
-            .unwrap_or(key)
-            .to_string()
+        self.messages().get(key).copied().unwrap_or(key).to_string()
     }
 }
