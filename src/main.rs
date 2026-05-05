@@ -175,7 +175,6 @@ async fn cmd_summary(json: bool, locale: &Locale, render_mode: RenderMode) -> an
     output::print_summary(
         &summary,
         total_requests,
-        &config.nickname,
         json,
         *locale,
         render_mode,

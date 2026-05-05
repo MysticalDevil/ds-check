@@ -30,18 +30,24 @@ impl RenderMode {
             Self::Unicode => BorderType::Rounded,
         }
     }
+
+    fn color(&self, c: Color) -> Color {
+        match self {
+            Self::Ascii => Color::Reset,
+            Self::Unicode => c,
+        }
+    }
 }
 
 pub fn print_summary(
     summary: &UserSummaryData,
     requests: u64,
-    nickname: &str,
     json: bool,
     locale: Locale,
     render_mode: RenderMode,
 ) {
     if json {
-        output_json_summary(summary, requests, nickname);
+        output_json_summary(summary, requests);
         return;
     }
 
@@ -57,36 +63,75 @@ pub fn print_summary(
         .unwrap_or(("0".into(), "CNY".into()));
     let tokens = &summary.monthly_token_usage;
 
-    let bal_str = format!(
-        "{:.2} {}",
-        balance.0.parse::<f64>().unwrap_or(0.0),
-        balance.1
-    );
-    let cost_str = format!("{:.2} {}", cost.0.parse::<f64>().unwrap_or(0.0), cost.1);
-    let req_str = format_num(requests);
-    let tok_str = format_num(tokens.parse().unwrap_or(0));
+    let bal_val = format!("{:.2} {}", balance.0.parse::<f64>().unwrap_or(0.0), balance.1);
+    let cost_val = format!("{:.2} {}", cost.0.parse::<f64>().unwrap_or(0.0), cost.1);
+    let req_val = format_num(requests);
+    let tok_val = format_num(tokens.parse().unwrap_or(0));
 
-    let val_style = Style::new().add_modifier(Modifier::BOLD);
+    let labels = [
+        locale.t("balance"),
+        locale.t("monthly_cost"),
+        locale.t("api_requests"),
+        locale.t("tokens"),
+    ];
+    let label_w = labels
+        .iter()
+        .map(|l| UnicodeWidthStr::width(l.as_str()))
+        .max()
+        .unwrap_or(10);
+    let value_w = [&bal_val, &cost_val, &req_val, &tok_val]
+        .iter()
+        .map(|v| UnicodeWidthStr::width(v.as_str()))
+        .max()
+        .unwrap_or(10);
+    let title_w =
+        UnicodeWidthStr::width(format!(" {} ", locale.t("header")).as_str());
+    let content_w = label_w + value_w + 10;
+    let card_w = content_w.max(title_w + 8);
+
+    let bold = Style::new().add_modifier(Modifier::BOLD);
+    let bal_style = bold.fg(render_mode.color(Color::Green));
+    let cost_style = bold.fg(render_mode.color(Color::Yellow));
+    let req_style = bold.fg(render_mode.color(Color::Cyan));
+    let tok_style = bold.fg(render_mode.color(Color::White));
+
     let rows = [
-        row2(&locale.t("user"), nickname, val_style),
-        row2(&locale.t("balance"), &bal_str, val_style),
-        row2(&locale.t("monthly_cost"), &cost_str, val_style),
-        row2(&locale.t("api_requests"), &req_str, val_style),
-        row2(&locale.t("tokens"), &tok_str, val_style),
+        Row::new([
+            Span::raw(labels[0].clone()),
+            Span::styled(bal_val, bal_style),
+        ]),
+        Row::new([
+            Span::raw(labels[1].clone()),
+            Span::styled(cost_val, cost_style),
+        ]),
+        Row::new([
+            Span::raw(labels[2].clone()),
+            Span::styled(req_val, req_style),
+        ]),
+        Row::new([
+            Span::raw(labels[3].clone()),
+
+            Span::styled(tok_val, tok_style),
+        ]),
     ];
 
     let block = Block::bordered()
         .border_type(render_mode.border_type())
         .title(format!(" {} ", locale.t("header")))
-        .title_style(Style::new().bold())
-        .border_style(Style::new().fg(Color::Cyan));
+        .title_style(bold)
+        .border_style(bold.fg(render_mode.color(Color::Cyan)));
 
-    let table = Table::new(rows, [Constraint::Min(14), Constraint::Min(20)])
-        .block(block)
-        .column_spacing(2);
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(label_w as u16),
+            Constraint::Length(value_w as u16),
+        ],
+    )
+    .block(block)
+    .column_spacing(2);
 
-    let rows = 5;
-    render_inline(table, rows + 2);
+    render_inline(table, 6, card_w);
 }
 
 pub fn print_usage(
@@ -114,10 +159,9 @@ pub fn print_usage(
         return;
     }
 
-    let header_style = Style::new()
-        .add_modifier(Modifier::BOLD)
-        .bg(Color::DarkGray);
-    let total_style = Style::new().add_modifier(Modifier::BOLD).fg(Color::Yellow);
+    let bold = Style::new().add_modifier(Modifier::BOLD);
+    let header_style = bold.bg(render_mode.color(Color::Rgb(40, 40, 40)));
+    let total_style = bold.fg(render_mode.color(Color::Yellow));
 
     let headers = [
         locale.t("date"),
@@ -182,13 +226,13 @@ pub fn print_usage(
     let table = Table::new(
         data_rows,
         [
-            Constraint::Min(12),
-            Constraint::Min(10),
-            Constraint::Min(10),
             Constraint::Min(10),
             Constraint::Min(10),
             Constraint::Min(8),
+            Constraint::Min(10),
+            Constraint::Min(10),
             Constraint::Min(8),
+            Constraint::Min(6),
         ],
     )
     .header(header)
@@ -197,19 +241,15 @@ pub fn print_usage(
         Block::bordered()
             .border_type(render_mode.border_type())
             .title(title)
-            .title_style(Style::new().bold())
-            .border_style(Style::new().fg(Color::Cyan)),
+            .title_style(bold)
+            .border_style(bold.fg(render_mode.color(Color::Cyan))),
     )
     .column_spacing(1);
 
-    let rows = filtered.len() + 4;
-    render_inline(table, rows.min(30));
+    render_inline(table, filtered.len() + 4, 72);
 }
 
-fn render_inline(widget: impl Widget, height: usize) {
-    let width = crossterm::terminal::size()
-        .map(|(w, _)| (w as usize).clamp(40, 200))
-        .unwrap_or(100);
+fn render_inline(widget: impl Widget, height: usize, width: usize) {
     let area = Rect::new(0, 0, width as u16, height as u16);
     let mut buffer = Buffer::empty(area);
     widget.render(area, &mut buffer);
@@ -243,14 +283,7 @@ fn render_inline(widget: impl Widget, height: usize) {
     }
 }
 
-fn row2(label: &str, value: &str, val_style: Style) -> Row<'static> {
-    Row::new([
-        Span::raw(label.to_string()),
-        Span::styled(value.to_string(), val_style),
-    ])
-}
-
-fn output_json_summary(summary: &UserSummaryData, requests: u64, nickname: &str) {
+fn output_json_summary(summary: &UserSummaryData, requests: u64) {
     let balance = summary
         .normal_wallets
         .first()
@@ -263,7 +296,6 @@ fn output_json_summary(summary: &UserSummaryData, requests: u64, nickname: &str)
         .unwrap_or(("0", "CNY"));
 
     let output = serde_json::json!({
-        "user": nickname,
         "balance": {
             "amount": balance.0.parse::<f64>().unwrap_or(0.0),
             "currency": balance.1,

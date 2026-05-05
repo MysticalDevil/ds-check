@@ -530,7 +530,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "crossterm",
  "dirs",
  "ratatui",
  "reqwest",
