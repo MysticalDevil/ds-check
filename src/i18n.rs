@@ -39,6 +39,8 @@ impl Locale {
         self.msg(key).to_string()
     }
 
+    /// Note: all hard-coded translations are `&'static str`, but the signature uses
+    /// `'a` so that unknown keys (fallback `_ => key`) type-check without allocation.
     fn msg<'a>(&self, key: &'a str) -> &'a str {
         match self {
             Self::ZhCN => match key {
@@ -51,12 +53,10 @@ impl Locale {
                 "token_saved" => "Token 已保存到 {}",
                 "use_help" => "未指定子命令，使用 ds-check --help 查看可用命令",
                 "header" => "DeepSeek 使用量",
-                "user" => "用户",
                 "balance" => "充值余额",
                 "monthly_cost" => "本月消费",
                 "api_requests" => "API 请求次数",
                 "tokens" => "Tokens",
-                "model" => "模型",
                 "date" => "日期",
                 "prompt_tokens" => "输入 Tokens",
                 "cache_hit_tokens" => "缓存命中",
@@ -80,12 +80,10 @@ impl Locale {
                 "token_saved" => "Token 已儲存至 {}",
                 "use_help" => "未指定子命令，使用 ds-check --help 查看可用命令",
                 "header" => "DeepSeek 使用量",
-                "user" => "使用者",
                 "balance" => "儲值餘額",
                 "monthly_cost" => "本月消費",
                 "api_requests" => "API 請求次數",
                 "tokens" => "Tokens",
-                "model" => "模型",
                 "date" => "日期",
                 "prompt_tokens" => "輸入 Tokens",
                 "cache_hit_tokens" => "快取命中",
@@ -109,12 +107,10 @@ impl Locale {
                 "token_saved" => "Token saved to {}",
                 "use_help" => "No subcommand specified. Use ds-check --help for available commands",
                 "header" => "DeepSeek Usage",
-                "user" => "User",
                 "balance" => "Balance",
                 "monthly_cost" => "Monthly Cost",
                 "api_requests" => "API Requests",
                 "tokens" => "Tokens",
-                "model" => "Model",
                 "date" => "Date",
                 "prompt_tokens" => "Prompt Tokens",
                 "cache_hit_tokens" => "Cache Hit",
@@ -136,14 +132,14 @@ impl Locale {
                 "auth_success" => "ログイン成功: {}",
                 "invalid_token" => "トークンの検証に失敗しました。確認して再試行してください",
                 "token_saved" => "トークンを {} に保存しました",
-                "use_help" => "サブコマンドが指定されていません。ds-check --help で利用可能なコマンドを確認してください",
+                "use_help" => {
+                    "サブコマンドが指定されていません。ds-check --help で利用可能なコマンドを確認してください"
+                }
                 "header" => "DeepSeek 使用量",
-                "user" => "ユーザー",
                 "balance" => "残高",
                 "monthly_cost" => "今月の利用料金",
                 "api_requests" => "APIリクエスト数",
                 "tokens" => "トークン",
-                "model" => "モデル",
                 "date" => "日付",
                 "prompt_tokens" => "入力トークン",
                 "cache_hit_tokens" => "キャッシュヒット",
