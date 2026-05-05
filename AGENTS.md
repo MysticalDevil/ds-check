@@ -9,7 +9,7 @@
 - **Language**: Rust (Edition 2024)
 - **Binary name**: `ds-check`
 - **License**: MIT
-- **Repository**: https://github.com/omega/ds-check
+- **Repository**: https://github.com/MysticalDevil/ds-check
 
 ## Technology Stack
 
@@ -24,6 +24,7 @@
 | `chrono` | Date/time handling |
 | `ratatui` | Terminal UI widget construction (Table, Block, Row) |
 | `crossterm` | Terminal ANSI color/style commands (queue, SetForegroundColor, etc.) |
+| `sha2` | SHA-256 hashing for cache key derivation |
 | `unicode-width` | CJK / wide-character display width calculation |
 
 ### Why crossterm is a direct dependency
@@ -57,8 +58,9 @@ DSCHECK_RENDER=ascii cargo run -- usage
 ```
 src/
 ├── main.rs   # CLI definition (clap), command dispatch, entry point
-├── api.rs    # HTTP client, API structs, response merging logic
+├── api.rs    # HTTP client, API structs, response merging logic, pricing loader
 ├── auth.rs   # Token persistence: load/save JSON to XDG config dir
+├── cache.rs  # 60s TTL API response cache, SHA-256 keyed, XDG_CACHE_HOME
 ├── i18n.rs   # Hard-coded translations for 4 locales (zh_CN, zh_TW, en_US, ja_JP)
 ├── mock.rs   # Mock data generators for offline development / demo
 └── output.rs # Rendering layer: Unicode cards (ratatui), ASCII plain text, JSON
@@ -66,13 +68,15 @@ src/
 
 ### Module Responsibilities
 
-- **`main.rs`** — Defines `Cli` and `Commands` via `clap` derive. Global flags: `--json`, `--locale`. Subcommands: `auth`, `summary`, `usage`, `models`. Reads env vars `DSCHECK_MOCK`, `DSCHECK_RENDER`, `DSCHECK_LOCALE`.
+- **`main.rs`** — Defines `Cli` and `Commands` via `clap` derive. Global flags: `--json`, `--locale`. Subcommands: `auth`, `summary`, `usage`, `models`, `price`. Reads env vars `DSCHECK_MOCK`, `DSCHECK_RENDER`, `DSCHECK_LOCALE`.
 - **`api.rs`** — `BASE_URL = "https://platform.deepseek.com"`. Generic `api_get<T>()` helper. Endpoints:
   - `/auth-api/v0/users/current`
   - `/api/v0/users/get_user_summary`
   - `/api/v0/usage/amount?month={}&year={}`
   - `/api/v0/usage/cost?month={}&year={}`
   - `merge_usage()` combines amount + cost data into a flat `Vec<DaySummary>`.
+  - `/models` on `api.deepseek.com` (via API Key, OpenAI-compatible)
+  - `load_pricing()` reads cached `pricing.json` from `XDG_CACHE_HOME/ds-check/pricing.json`
 - **`auth.rs`** — Stores `AuthConfig` (token, nickname, email, currency) as pretty-printed JSON at `$XDG_CONFIG_HOME/ds-check/auth.json`.
 - **`i18n.rs`** — `Locale` enum with `from_str()`, `detect()` (reads `LANG`), and `t(key)` for localized strings.
 - **`mock.rs`** — `mock_user_summary()`, `mock_usage_amount()`, `mock_usage_cost()`. Cost mock uses hard-coded rates: cache_hit 0.025/1M, cache_miss 0.55/1M, response 2.19/1M.

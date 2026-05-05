@@ -1,23 +1,124 @@
-# DeepSeek 开放平台 - 用量/账户 API 文档
+# DeepSeek 开放平台 API 文档
 
-> 本文档通过抓包分析 [platform.deepseek.com](https://platform.deepseek.com) 获得，
-> 记录与用量信息、余额、账单相关的后台 API。
+> 本文档记录 DeepSeek 两类接口：面向开发者的 **API Key** 接口，以及面向平台网页的 **Bearer Token** 内部接口。
+> 抓取时间：2026 年 5 月。
 
 ---
 
-## 通用说明
+## 第一部分：API Key 接口（`api.deepseek.com`）
 
-### 请求头
+标准的 OpenAI 兼容 API，用于程序调用模型、查询余额等。
 
-所有 API 请求均需携带以下请求头：
+### 通用说明
+
+**Base URL**: `https://api.deepseek.com`
+
+**认证方式**:
 
 | Header | 值 | 说明 |
 |---|---|---|
-| `Authorization` | `Bearer <token>` | 登录后获取的 token |
+| `Authorization` | `Bearer <api_key>` | 从 [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) 获取 |
+| `Accept` | `application/json` | 可选 |
+
+**响应格式**: 标准 OpenAI 兼容 JSON，非 `code/biz_code` 包装结构。
+
+---
+
+### 1.1 列出模型
+
+```
+GET https://api.deepseek.com/models
+```
+
+**用途**：获取当前可用的模型列表（全量）。
+
+**CLI 用法**：`ds-check models` 命令在配置了 API Key 时会自动优先调用此接口：
+
+```bash
+ds-check auth <token> --api-key <your-api-key>
+ds-check models
+```
+
+**响应示例**:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "deepseek-v4-flash",
+      "object": "model",
+      "owned_by": "deepseek"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "object": "model",
+      "owned_by": "deepseek"
+    }
+  ]
+}
+```
+
+> **注意**：此端点仅返回模型 ID 列表，**不包含定价信息**。
+>
+> 如果未配置 API Key，`ds-check models` 会回退到 `platform.deepseek.com` 的用量接口，仅显示当月有数据的部分模型，并在 stderr 提示用户配置 API Key。
+
+---
+
+### 1.2 查询余额
+
+```
+GET https://api.deepseek.com/user/balance
+```
+
+**用途**：查询账号余额及可用状态。
+
+**响应字段说明**:
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `is_available` | boolean | 当前账户是否有余额可供 API 调用 |
+| `balance_infos[]` | array | 余额详情列表 |
+| `balance_infos[].currency` | string | 货币类型 (`CNY`) |
+| `balance_infos[].total_balance` | string | 总余额 |
+| `balance_infos[].granted_balance` | string | 赠送余额 |
+| `balance_infos[].topped_up_balance` | string | 充值余额 |
+
+**响应示例**:
+
+```json
+{
+  "is_available": true,
+  "balance_infos": [
+    {
+      "currency": "CNY",
+      "total_balance": "114.29",
+      "granted_balance": "0.00",
+      "topped_up_balance": "114.29"
+    }
+  ]
+}
+```
+
+---
+
+## 第二部分：网页 Bearer Token 接口（`platform.deepseek.com`）
+
+DeepSeek 开放平台网页后台使用的内部接口，用于展示用量、余额、账单等。
+
+### 通用说明
+
+**Base URL**: `https://platform.deepseek.com`
+
+**请求头**:
+
+| Header | 值 | 说明 |
+|---|---|---|
+| `Authorization` | `Bearer <token>` | 浏览器登录后从请求头中获取 |
 | `x-app-version` | `20240425.0` | 客户端版本标识 |
 | `Cookie` | 登录态 cookie | 含 `smidV2` 等 |
 
-### 响应结构
+**响应结构**:
 
 所有接口统一响应格式：
 
@@ -36,15 +137,20 @@
 - `code=0`、`biz_code=0` 表示成功
 - 实际数据在 `data.biz_data` 中
 
-### Token 获取方式
+**常见错误码**：
 
-Token 在浏览器登录平台后，可从任意 API 请求头的 `Authorization: Bearer <token>` 中获取。
+| code | 说明 | 解决方式 |
+|---|---|---|
+| `0` | 成功 | — |
+| `40003` | 登录凭证过期或失效 | 重新登录平台，获取新的 Bearer Token |
+
+> `ds-check` 在收到 `40003` 时会提示对应 locale 的友好错误信息（如 *"登录凭证已过期或失效，请重新登录"*）。
+
+**Token 获取方式**：浏览器登录平台后，可从任意 API 请求头的 `Authorization: Bearer <token>` 中获取。
 
 ---
 
-## 一、用户信息 & 登录态
-
-### 1.1 获取当前用户信息
+### 2.1 获取当前用户信息
 
 ```
 GET https://platform.deepseek.com/auth-api/v0/users/current
@@ -52,7 +158,7 @@ GET https://platform.deepseek.com/auth-api/v0/users/current
 
 **用途**：获取当前登录用户的个人信息、余额预警设置、功能开关等。
 
-**响应字段说明**：
+**响应字段说明**:
 
 | 字段路径 | 类型 | 说明 |
 |---|---|---|
@@ -72,7 +178,7 @@ GET https://platform.deepseek.com/auth-api/v0/users/current
 | `biz_data.identity_verification_id` | string | 个人认证 ID |
 | `biz_data.business_verification_id` | string | 企业认证 ID（可能为 `null`） |
 
-**响应示例**：
+**响应示例**:
 
 ```json
 {
@@ -112,18 +218,15 @@ GET https://platform.deepseek.com/auth-api/v0/users/current
 
 ---
 
-## 二、账户余额 & 用量摘要
-
-### 2.1 获取用户用量摘要
+### 2.2 获取用户用量摘要
 
 ```
 GET https://platform.deepseek.com/api/v0/users/get_user_summary
 ```
 
-**用途**：获取账户余额、本月消费金额、本月 token 用量、token 预估余额等核心数据。
-这是用量信息页面的主要数据源。
+**用途**：获取账户余额、本月消费金额、本月 token 用量、token 预估余额等核心数据。这是用量信息页面的主要数据源。
 
-**响应字段说明**：
+**响应字段说明**:
 
 | 字段路径 | 类型 | 说明 |
 |---|---|---|
@@ -141,7 +244,7 @@ GET https://platform.deepseek.com/api/v0/users/get_user_summary
 | `biz_data.monthly_costs[].currency` | string | 货币类型 |
 | `biz_data.monthly_costs[].amount` | string | 消费金额（高精度字符串） |
 
-**响应示例**：
+**响应示例**:
 
 ```json
 {
@@ -181,9 +284,7 @@ GET https://platform.deepseek.com/api/v0/users/get_user_summary
 
 ---
 
-## 三、用量明细
-
-### 3.1 Token 用量详情（按天/模型）
+### 2.3 Token 用量详情（按天/模型）
 
 ```
 GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
@@ -221,7 +322,7 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
 - `deepseek-v4-flash`
 - `deepseek-chat & deepseek-reasoner`
 
-**响应示例（部分）**：
+**响应示例（部分）**:
 
 ```json
 {
@@ -249,16 +350,6 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
             { "type": "RESPONSE_TOKEN", "amount": "0" },
             { "type": "REQUEST", "amount": "0" }
           ]
-        },
-        {
-          "model": "deepseek-chat & deepseek-reasoner",
-          "usage": [
-            { "type": "PROMPT_TOKEN", "amount": "0" },
-            { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
-            { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
-            { "type": "RESPONSE_TOKEN", "amount": "0" },
-            { "type": "REQUEST", "amount": "0" }
-          ]
         }
       ],
       "days": [
@@ -274,103 +365,34 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
                 { "type": "RESPONSE_TOKEN", "amount": "33927" },
                 { "type": "REQUEST", "amount": "37" }
               ]
-            },
-            {
-              "model": "deepseek-v4-flash",
-              "usage": [
-                { "type": "PROMPT_TOKEN", "amount": "0" },
-                { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
-                { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
-                { "type": "RESPONSE_TOKEN", "amount": "0" },
-                { "type": "REQUEST", "amount": "0" }
-              ]
-            },
-            {
-              "model": "deepseek-chat & deepseek-reasoner",
-              "usage": [
-                { "type": "PROMPT_TOKEN", "amount": "0" },
-                { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
-                { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
-                { "type": "RESPONSE_TOKEN", "amount": "0" },
-                { "type": "REQUEST", "amount": "0" }
-              ]
             }
           ]
         }
-        // ... 后续日期（含用量为 0 的日期）
       ]
     }
   }
 }
 ```
 
-### 3.2 消费金额详情（按天/模型）
+---
+
+### 2.4 消费金额详情（按天/模型）
 
 ```
 GET https://platform.deepseek.com/api/v0/usage/cost?month={月}&year={年}
 ```
 
-**参数**：同 3.1。
+**参数**：同 2.3。
 
 **用途**：获取指定月份每天的消费金额明细，按模型和 token 类型拆分。
 
 **响应结构**：与 `usage/amount` 相同，但 `usage[].amount` 为金额（CNY 元）而非 token 数。
 
-**响应示例（部分）**：
-
-```json
-{
-  "code": 0,
-  "msg": "",
-  "data": {
-    "biz_data": [
-      {
-        "total": [
-          {
-            "model": "deepseek-v4-pro",
-            "usage": [
-              { "type": "PROMPT_TOKEN", "amount": "0" },
-              { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "2.5990112000000000" },
-              { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "6.1267650000000000" },
-              { "type": "RESPONSE_TOKEN", "amount": "4.3377660000000000" },
-              { "type": "REQUEST", "amount": "0" }
-            ]
-          },
-          {
-            "model": "deepseek-v4-flash",
-            "usage": [
-              { "type": "PROMPT_TOKEN", "amount": "0" },
-              { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
-              { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
-              { "type": "RESPONSE_TOKEN", "amount": "0" },
-              { "type": "REQUEST", "amount": "0" }
-            ]
-          },
-          {
-            "model": "deepseek-chat & deepseek-reasoner",
-            "usage": [
-              { "type": "PROMPT_TOKEN", "amount": "0" },
-              { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
-              { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
-              { "type": "RESPONSE_TOKEN", "amount": "0" },
-              { "type": "REQUEST", "amount": "0" }
-            ]
-          }
-        ],
-        "days": [ ... ]
-      }
-    ]
-  }
-}
-```
-
 **注意**：此接口的 `data.biz_data` 是个数组（外层包裹了一层），需要取 `[0]`。
 
 ---
 
-## 四、充值账单
-
-### 4.1 获取充值/交易记录
+### 2.5 获取充值/交易记录
 
 ```
 GET https://platform.deepseek.com/auth-api/v0/users/get_all_invoice
@@ -378,7 +400,7 @@ GET https://platform.deepseek.com/auth-api/v0/users/get_all_invoice
 
 **用途**：获取全部充值记录和赠送记录。
 
-**响应字段说明**：
+**响应字段说明**:
 
 | 字段路径 | 类型 | 说明 |
 |---|---|---|
@@ -392,38 +414,9 @@ GET https://platform.deepseek.com/auth-api/v0/users/get_all_invoice
 | `payment_orders[].updated_at` | string | 更新时间 (ISO 8601) |
 | `biz_data.invoices.bonus_orders[]` | array | 赠送记录列表 |
 
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "msg": "",
-  "data": {
-    "biz_data": {
-      "invoices": {
-        "payment_orders": [
-          {
-            "payment_order_id": "cmbUnionPay1777776646411gZel",
-            "amount": "50",
-            "currency": "CNY",
-            "payment_order_status": "SUCCESS",
-            "paid_at": "2026-05-03T02:51:01+00:00",
-            "inserted_at": "2026-05-03T02:50:46.652709+00:00",
-            "updated_at": "2026-05-03T02:51:01.585066+00:00"
-          }
-        ],
-        "bonus_orders": []
-      }
-    }
-  }
-}
-```
-
 ---
 
-## 五、其他
-
-### 5.1 客户端配置
+### 2.6 客户端配置
 
 ```
 GET https://platform.deepseek.com/api/v0/client/settings?did={设备ID}
@@ -434,7 +427,57 @@ GET https://platform.deepseek.com/api/v0/client/settings?scope=banner
 
 ---
 
-## API 接口汇总表
+## 第三部分：模型定价
+
+DeepSeek 官方未提供独立的定价 API。定价信息来自官方文档页面的静态 HTML：
+- 中文: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
+- 英文: https://api-docs.deepseek.com/quick_start/pricing
+
+本项目将定价数据内置在 `pricing.json` 中，`ds-check price` 命令直接读取该文件，无需网络请求。
+
+### 定价数据格式 (`pricing.json`)
+
+```json
+{
+  "currency": "CNY",
+  "unit": "per 1M tokens",
+  "note": "deepseek-v4-pro 75% discount extended to 2026/05/31 23:59 CST",
+  "models": [
+    {
+      "model": "deepseek-v4-flash",
+      "input_cache_hit": "0.02",
+      "input_cache_miss": "1.00",
+      "output": "2.00"
+    },
+    {
+      "model": "deepseek-v4-pro",
+      "input_cache_hit": "0.025",
+      "input_cache_miss": "3.00",
+      "output": "6.00"
+    }
+  ]
+}
+```
+
+### 说明
+
+- 价格单位为 **每百万 tokens**。
+- `deepseek-v4-pro` 当前享受 **2.5 折优惠**（即原价的 25%），优惠期延长至 **北京时间 2026/05/31 23:59**。
+- 输入缓存命中价格已降至首发价格的 **1/10**，自 **2026/4/26 20:15 CST** 起生效。
+- `deepseek-chat` 与 `deepseek-reasoner` 两个模型名将于日后弃用，分别对应 `deepseek-v4-flash` 的非思考与思考模式。
+
+---
+
+## 接口汇总表
+
+### API Key 接口 (`api.deepseek.com`)
+
+| 接口 | 方法 | 用途 |
+|---|---|---|
+| `/models` | GET | 列出可用模型 |
+| `/user/balance` | GET | 查询账户余额 |
+
+### 网页 Bearer Token 接口 (`platform.deepseek.com`)
 
 | 类别 | 接口 | 方法 | 用途 |
 |---|---|---|---|
@@ -449,7 +492,7 @@ GET https://platform.deepseek.com/api/v0/client/settings?scope=banner
 
 ## 使用示例
 
-### Python 示例：获取用量摘要
+### Python 示例：获取用量摘要（网页 Token）
 
 ```python
 import requests
@@ -475,17 +518,26 @@ print(f"本月消费: ¥{float(monthly_cost):.2f}")
 print(f"本月 Tokens: {monthly_tokens}")
 ```
 
-### curl 示例：获取 Token 用量明细
+### curl 示例：获取 Token 用量明细（网页 Token）
 
 ```bash
 curl -s \
   -H "Authorization: Bearer <TOKEN>" \
-  -H "x-app-version: 20240425.0" \
+  -H "x-app-version: "20240425.0"" \
   "https://platform.deepseek.com/api/v0/usage/amount?month=5&year=2026" \
+  | python3 -m json.tool
+```
+
+### curl 示例：查询余额（API Key）
+
+```bash
+curl -s \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Accept: application/json" \
+  "https://api.deepseek.com/user/balance" \
   | python3 -m json.tool
 ```
 
 ---
 
-> **注意**：以上 API 为 DeepSeek 开放平台内部接口，非官方公开 API，可能随时变更。
-> 本文档抓取时间为 2026 年 5 月。
+> **注意**：`platform.deepseek.com` 的接口为 DeepSeek 开放平台内部接口，非官方公开 API，可能随时变更。`api.deepseek.com` 为官方 OpenAI 兼容 API，相对稳定。
