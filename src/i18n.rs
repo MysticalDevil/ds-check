@@ -156,3 +156,62 @@ impl Locale {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_str_zh_cn() {
+        assert_eq!(Locale::from_str("zh_CN"), Locale::ZhCN);
+        assert_eq!(Locale::from_str("zh-CN"), Locale::ZhCN);
+        assert_eq!(Locale::from_str("zh"), Locale::ZhCN);
+        assert_eq!(Locale::from_str("zh-hans"), Locale::ZhCN);
+    }
+
+    #[test]
+    fn test_from_str_zh_tw() {
+        assert_eq!(Locale::from_str("zh_TW"), Locale::ZhTW);
+        assert_eq!(Locale::from_str("zh-tw"), Locale::ZhTW);
+        assert_eq!(Locale::from_str("zh_hk"), Locale::ZhTW);
+        assert_eq!(Locale::from_str("zh-hant"), Locale::ZhTW);
+    }
+
+    #[test]
+    fn test_from_str_ja() {
+        assert_eq!(Locale::from_str("ja_JP"), Locale::JaJP);
+        assert_eq!(Locale::from_str("jp"), Locale::JaJP);
+    }
+
+    #[test]
+    fn test_from_str_en_default() {
+        assert_eq!(Locale::from_str("en_US"), Locale::EnUS);
+        assert_eq!(Locale::from_str("C"), Locale::EnUS);
+        assert_eq!(Locale::from_str("fr_FR"), Locale::EnUS);
+        assert_eq!(Locale::from_str(""), Locale::EnUS);
+    }
+
+    #[test]
+    fn test_t_known_keys() {
+        let en = Locale::EnUS;
+        assert_eq!(en.t("balance"), "Balance");
+        assert_eq!(en.t("total"), "Total");
+
+        let zh = Locale::ZhCN;
+        assert_eq!(zh.t("balance"), "充值余额");
+    }
+
+    #[test]
+    fn test_t_unknown_key_fallback() {
+        let en = Locale::EnUS;
+        assert_eq!(en.t("nonexistent_key"), "nonexistent_key");
+    }
+
+    #[test]
+    fn test_t_dead_keys_removed() {
+        // "user" and "model" were removed as dead keys
+        let en = Locale::EnUS;
+        assert_eq!(en.t("user"), "user"); // falls back to key itself
+        assert_eq!(en.t("model"), "model");
+    }
+}

@@ -619,3 +619,65 @@ fn format_num(n: u64) -> String {
         n.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_num_small() {
+        assert_eq!(format_num(0), "0");
+        assert_eq!(format_num(999), "999");
+    }
+
+    #[test]
+    fn test_format_num_kilo() {
+        assert_eq!(format_num(1_000), "1.00K");
+        assert_eq!(format_num(1_500), "1.50K");
+        assert_eq!(format_num(999_999), "1000.00K");
+    }
+
+    #[test]
+    fn test_format_num_mega() {
+        assert_eq!(format_num(1_000_000), "1.00M");
+        assert_eq!(format_num(2_500_000), "2.50M");
+        assert_eq!(format_num(999_999_999), "1000.00M");
+    }
+
+    #[test]
+    fn test_format_num_giga() {
+        assert_eq!(format_num(1_000_000_000), "1.00B");
+        assert_eq!(format_num(3_500_000_000), "3.50B");
+    }
+
+    #[test]
+    fn test_model_matches_exact() {
+        assert!(model_matches("deepseek-v4-pro", "deepseek-v4-pro"));
+    }
+
+    #[test]
+    fn test_model_matches_substring() {
+        assert!(model_matches("deepseek-v4-pro", "v4-pro"));
+        assert!(model_matches("deepseek-v4-pro", "pro"));
+    }
+
+    #[test]
+    fn test_model_matches_case_insensitive() {
+        assert!(model_matches("DeepSeek-V4-Pro", "v4-pro"));
+    }
+
+    #[test]
+    fn test_model_matches_not_bidirectional() {
+        // filter "v4" should NOT match "deepseek-v4-flash" via f.contains(a)
+        // because we removed that direction
+        assert!(!model_matches(
+            "deepseek-v4-flash",
+            "deepseek-v4-flash-extra"
+        ));
+    }
+
+    #[test]
+    fn test_model_matches_no_match() {
+        assert!(!model_matches("deepseek-chat", "v4-pro"));
+    }
+}

@@ -6,6 +6,8 @@ const BASE_URL: &str = "https://platform.deepseek.com";
 
 static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
+#[allow(dead_code)]
+pub const USAGE_PROMPT: &str = "PROMPT_TOKEN";
 pub const USAGE_PROMPT_CACHE_HIT: &str = "PROMPT_CACHE_HIT_TOKEN";
 pub const USAGE_PROMPT_CACHE_MISS: &str = "PROMPT_CACHE_MISS_TOKEN";
 pub const USAGE_RESPONSE: &str = "RESPONSE_TOKEN";
@@ -213,4 +215,156 @@ fn get_amount(items: &[UsageItem], type_name: &str) -> u64 {
         .find(|u| u.usage_type == type_name)
         .and_then(|u| u.amount.parse::<u64>().ok())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(usage_type: &str, amount: &str) -> UsageItem {
+        UsageItem {
+            usage_type: usage_type.to_string(),
+            amount: amount.to_string(),
+        }
+    }
+
+    fn model_usage(model: &str, usage: Vec<UsageItem>) -> ModelUsage {
+        ModelUsage {
+            model: model.to_string(),
+            usage,
+        }
+    }
+
+    fn day_usage(date: &str, data: Vec<ModelUsage>) -> DayUsage {
+        DayUsage {
+            date: date.to_string(),
+            data,
+        }
+    }
+
+    #[test]
+    fn test_get_amount_found() {
+        let items = vec![
+            item(USAGE_PROMPT_CACHE_HIT, "100"),
+            item(USAGE_RESPONSE, "50"),
+        ];
+        assert_eq!(get_amount(&items, USAGE_PROMPT_CACHE_HIT), 100);
+        assert_eq!(get_amount(&items, USAGE_RESPONSE), 50);
+    }
+
+    #[test]
+    fn test_get_amount_not_found() {
+        let items = vec![item(USAGE_PROMPT_CACHE_HIT, "100")];
+        assert_eq!(get_amount(&items, USAGE_REQUEST), 0);
+    }
+
+    #[test]
+    fn test_get_amount_parse_fail() {
+        let items = vec![item(USAGE_PROMPT_CACHE_HIT, "not_a_number")];
+        assert_eq!(get_amount(&items, USAGE_PROMPT_CACHE_HIT), 0);
+    }
+
+    #[test]
+    fn test_merge_usage_basic() {
+        let amount = UsageAmountData {
+            total: vec![model_usage("test-model", vec![])],
+            days: vec![day_usage(
+                "2024-01-01",
+                vec![model_usage(
+                    "test-model",
+                    vec![
+                        item(USAGE_PROMPT_CACHE_HIT, "100"),
+                        item(USAGE_PROMPT_CACHE_MISS, "50"),
+                        item(USAGE_RESPONSE, "30"),
+                        item(USAGE_REQUEST, "5"),
+                    ],
+                )],
+            )],
+        };
+
+        let cost = vec![UsageAmountData {
+            total: vec![model_usage("test-model", vec![])],
+            days: vec![day_usage(
+                "2024-01-01",
+                vec![model_usage(
+                    "test-model",
+                    vec![
+                        item(USAGE_PROMPT_CACHE_HIT, "0.01"),
+                        item(USAGE_PROMPT_CACHE_MISS, "0.02"),
+                        item(USAGE_RESPONSE, "0.03"),
+                    ],
+                )],
+            )],
+        }];
+
+        let result = merge_usage(&amount, &cost);
+        assert_eq!(result.len(), 1);
+        let day = &result[0];
+        assert_eq!(day.date, "2024-01-01");
+        assert_eq!(day.model, "test-model");
+        assert_eq!(day.prompt_tokens, 150); // 100 + 50
+        assert_eq!(day.cache_hit_tokens, 100);
+        assert_eq!(day.cache_miss_tokens, 50);
+        assert_eq!(day.response_tokens, 30);
+        assert_eq!(day.requests, 5);
+        assert!((day.cost - 0.06).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_merge_usage_no_cost() {
+        let amount = UsageAmountData {
+            total: vec![model_usage("m", vec![])],
+            days: vec![day_usage(
+                "2024-01-01",
+                vec![model_usage(
+                    "m",
+                    vec![
+                        item(USAGE_PROMPT_CACHE_HIT, "10"),
+                        item(USAGE_RESPONSE, "5"),
+                    ],
+                )],
+            )],
+        };
+
+        let result = merge_usage(&amount, &[]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].cost, 0.0);
+        assert_eq!(result[0].prompt_tokens, 10);
+    }
+
+    #[test]
+    fn test_merge_usage_skips_empty() {
+        let amount = UsageAmountData {
+            total: vec![model_usage("m", vec![])],
+            days: vec![day_usage(
+                "2024-01-01",
+                vec![model_usage("m", vec![item(USAGE_REQUEST, "0")])],
+            )],
+        };
+
+        let result = merge_usage(&amount, &[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_merge_usage_prompt_is_cache_sum() {
+        // Verify the fix: prompt_tokens = cache_hit + cache_miss
+        let amount = UsageAmountData {
+            total: vec![model_usage("m", vec![])],
+            days: vec![day_usage(
+                "2024-01-01",
+                vec![model_usage(
+                    "m",
+                    vec![
+                        item(USAGE_PROMPT, "0"),
+                        item(USAGE_PROMPT_CACHE_HIT, "1000"),
+                        item(USAGE_PROMPT_CACHE_MISS, "200"),
+                    ],
+                )],
+            )],
+        };
+
+        let result = merge_usage(&amount, &[]);
+        assert_eq!(result[0].prompt_tokens, 1200);
+    }
 }
