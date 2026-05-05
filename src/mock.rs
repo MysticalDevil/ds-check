@@ -44,64 +44,48 @@ pub fn mock_usage_amount() -> api::UsageAmountData {
             date: format!("{:04}-{:02}-{:02}", now_year(), now_month(), d),
             data: vec![
                 model_usage("deepseek-v4-pro", &mock_day_tokens(d)),
-                model_usage("deepseek-v4-flash", &[]),
+                model_usage("deepseek-v4-flash", &mock_flash_day_tokens(d)),
                 model_usage("deepseek-chat & deepseek-reasoner", &[]),
             ],
         })
         .collect();
 
-    let total_prompt_cache_hit: u64 = days
-        .iter()
-        .flat_map(|d| d.data.iter())
-        .flat_map(|m| &m.usage)
-        .filter(|u| u.usage_type == "PROMPT_CACHE_HIT_TOKEN")
-        .filter_map(|u| u.amount.parse::<u64>().ok())
-        .sum();
-    let total_prompt_cache_miss: u64 = days
-        .iter()
-        .flat_map(|d| d.data.iter())
-        .flat_map(|m| &m.usage)
-        .filter(|u| u.usage_type == "PROMPT_CACHE_MISS_TOKEN")
-        .filter_map(|u| u.amount.parse::<u64>().ok())
-        .sum();
-    let total_response: u64 = days
-        .iter()
-        .flat_map(|d| d.data.iter())
-        .flat_map(|m| &m.usage)
-        .filter(|u| u.usage_type == "RESPONSE_TOKEN")
-        .filter_map(|u| u.amount.parse::<u64>().ok())
-        .sum();
-    let total_requests: u64 = days
-        .iter()
-        .flat_map(|d| d.data.iter())
-        .flat_map(|m| &m.usage)
-        .filter(|u| u.usage_type == "REQUEST")
-        .filter_map(|u| u.amount.parse::<u64>().ok())
-        .sum();
-
     api::UsageAmountData {
         total: vec![
-            model_usage(
-                "deepseek-v4-pro",
-                &[
-                    ("PROMPT_TOKEN", "0"),
-                    (
-                        "PROMPT_CACHE_HIT_TOKEN",
-                        &total_prompt_cache_hit.to_string(),
-                    ),
-                    (
-                        "PROMPT_CACHE_MISS_TOKEN",
-                        &total_prompt_cache_miss.to_string(),
-                    ),
-                    ("RESPONSE_TOKEN", &total_response.to_string()),
-                    ("REQUEST", &total_requests.to_string()),
-                ],
-            ),
-            empty_model("deepseek-v4-flash"),
+            model_usage_totals(&days, "deepseek-v4-pro"),
+            model_usage_totals(&days, "deepseek-v4-flash"),
             empty_model("deepseek-chat & deepseek-reasoner"),
         ],
         days,
     }
+}
+
+fn model_usage_totals(days: &[api::DayUsage], model: &str) -> api::ModelUsage {
+    let hit: u64 = sum_usage_type(days, model, "PROMPT_CACHE_HIT_TOKEN");
+    let miss: u64 = sum_usage_type(days, model, "PROMPT_CACHE_MISS_TOKEN");
+    let response: u64 = sum_usage_type(days, model, "RESPONSE_TOKEN");
+    let requests: u64 = sum_usage_type(days, model, "REQUEST");
+
+    model_usage(
+        model,
+        &[
+            ("PROMPT_TOKEN", "0"),
+            ("PROMPT_CACHE_HIT_TOKEN", &hit.to_string()),
+            ("PROMPT_CACHE_MISS_TOKEN", &miss.to_string()),
+            ("RESPONSE_TOKEN", &response.to_string()),
+            ("REQUEST", &requests.to_string()),
+        ],
+    )
+}
+
+fn sum_usage_type(days: &[api::DayUsage], model: &str, usage_type: &str) -> u64 {
+    days.iter()
+        .flat_map(|d| d.data.iter())
+        .filter(|m| m.model == model)
+        .flat_map(|m| &m.usage)
+        .filter(|u| u.usage_type == usage_type)
+        .filter_map(|u| u.amount.parse::<u64>().ok())
+        .sum()
 }
 
 pub fn mock_usage_cost() -> Vec<api::UsageAmountData> {
@@ -221,6 +205,46 @@ fn mock_day_tokens(day: u32) -> Vec<(&'static str, &'static str)> {
             ("PROMPT_CACHE_MISS_TOKEN", "311968"),
             ("RESPONSE_TOKEN", "138126"),
             ("REQUEST", "186"),
+        ],
+        _ => vec![
+            ("PROMPT_TOKEN", "0"),
+            ("PROMPT_CACHE_HIT_TOKEN", "0"),
+            ("PROMPT_CACHE_MISS_TOKEN", "0"),
+            ("RESPONSE_TOKEN", "0"),
+            ("REQUEST", "0"),
+        ],
+    }
+}
+
+fn mock_flash_day_tokens(day: u32) -> Vec<(&'static str, &'static str)> {
+    match day {
+        1 => vec![
+            ("PROMPT_TOKEN", "0"),
+            ("PROMPT_CACHE_HIT_TOKEN", "512000"),
+            ("PROMPT_CACHE_MISS_TOKEN", "128000"),
+            ("RESPONSE_TOKEN", "45000"),
+            ("REQUEST", "120"),
+        ],
+        2 => vec![
+            ("PROMPT_TOKEN", "0"),
+            ("PROMPT_CACHE_HIT_TOKEN", "2048000"),
+            ("PROMPT_CACHE_MISS_TOKEN", "512000"),
+            ("RESPONSE_TOKEN", "180000"),
+            ("REQUEST", "480"),
+        ],
+        3 => vec![
+            ("PROMPT_TOKEN", "0"),
+            ("PROMPT_CACHE_HIT_TOKEN", "1024000"),
+            ("PROMPT_CACHE_MISS_TOKEN", "256000"),
+            ("RESPONSE_TOKEN", "90000"),
+            ("REQUEST", "240"),
+        ],
+        4 => vec![
+            ("PROMPT_TOKEN", "0"),
+            ("PROMPT_CACHE_HIT_TOKEN", "4096000"),
+            ("PROMPT_CACHE_MISS_TOKEN", "1024000"),
+            ("RESPONSE_TOKEN", "360000"),
+            ("REQUEST", "960"),
         ],
         _ => vec![
             ("PROMPT_TOKEN", "0"),
