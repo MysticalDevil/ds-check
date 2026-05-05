@@ -64,13 +64,11 @@ fn get_locale(cli: &Cli) -> Locale {
     Locale::detect()
 }
 
-
 fn is_mock() -> bool {
     std::env::var("DSCHECK_MOCK")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -153,14 +151,16 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
     println!("{}", locale.t("auth_success").replace("{}", &nickname));
     println!(
         "{}",
-        locale.t("token_saved").replace("{}", &auth::config_path_str())
+        locale
+            .t("token_saved")
+            .replace("{}", &auth::config_path_str())
     );
 
     Ok(())
 }
 
 async fn cmd_summary(json: bool, locale: &Locale, render_mode: RenderMode) -> anyhow::Result<()> {
-    let config = auth::load()
+    let config = auth::load()?
         .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
     let (summary, amount) = if is_mock() {
@@ -177,17 +177,11 @@ async fn cmd_summary(json: bool, locale: &Locale, render_mode: RenderMode) -> an
         .total
         .iter()
         .flat_map(|m| &m.usage)
-        .filter(|u| u.usage_type == "REQUEST")
+        .filter(|u| u.usage_type == api::USAGE_REQUEST)
         .filter_map(|u| u.amount.parse::<u64>().ok())
         .sum();
 
-    output::print_summary(
-        &summary,
-        total_requests,
-        json,
-        *locale,
-        render_mode,
-    );
+    output::print_summary(&summary, total_requests, json, *locale, render_mode)?;
     Ok(())
 }
 
@@ -199,7 +193,7 @@ async fn cmd_usage(
     locale: &Locale,
     render_mode: RenderMode,
 ) -> anyhow::Result<()> {
-    let config = auth::load()
+    let config = auth::load()?
         .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
     let now = chrono::Local::now();
@@ -239,11 +233,11 @@ async fn cmd_usage(
                 .collect();
             models.sort();
             for m in models {
-                output::print_usage(&days, Some(m), json, *locale, render_mode);
+                output::print_usage(&days, Some(m), json, *locale, render_mode)?;
             }
         }
         _ => {
-            output::print_usage(&days, model, json, *locale, render_mode);
+            output::print_usage(&days, model, json, *locale, render_mode)?;
         }
     }
 

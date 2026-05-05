@@ -1,12 +1,12 @@
 use crate::api::{DaySummary, UserSummaryData};
 use crate::i18n::Locale;
+use crossterm::{queue, style::*};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, BorderType, Cell, Padding, Row, Table, Widget};
-use crossterm::{queue, style::*};
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -84,29 +84,30 @@ fn rt_to_ct(c: Color) -> crossterm::style::Color {
     }
 }
 
-fn apply_style(stdout: &mut std::io::Stdout, style: Style) {
-    queue!(stdout, ResetColor).unwrap();
+fn apply_style(stdout: &mut std::io::Stdout, style: Style) -> anyhow::Result<()> {
+    queue!(stdout, ResetColor)?;
     if let Some(fg) = style.fg {
-        queue!(stdout, SetForegroundColor(rt_to_ct(fg))).unwrap();
+        queue!(stdout, SetForegroundColor(rt_to_ct(fg)))?;
     }
     if let Some(bg) = style.bg {
-        queue!(stdout, SetBackgroundColor(rt_to_ct(bg))).unwrap();
+        queue!(stdout, SetBackgroundColor(rt_to_ct(bg)))?;
     }
     if style.add_modifier.contains(Modifier::BOLD) {
-        queue!(stdout, SetAttribute(Attribute::Bold)).unwrap();
+        queue!(stdout, SetAttribute(Attribute::Bold))?;
     }
     if style.add_modifier.contains(Modifier::DIM) {
-        queue!(stdout, SetAttribute(Attribute::Dim)).unwrap();
+        queue!(stdout, SetAttribute(Attribute::Dim))?;
     }
     if style.add_modifier.contains(Modifier::ITALIC) {
-        queue!(stdout, SetAttribute(Attribute::Italic)).unwrap();
+        queue!(stdout, SetAttribute(Attribute::Italic))?;
     }
     if style.add_modifier.contains(Modifier::UNDERLINED) {
-        queue!(stdout, SetAttribute(Attribute::Underlined)).unwrap();
+        queue!(stdout, SetAttribute(Attribute::Underlined))?;
     }
     if style.add_modifier.contains(Modifier::REVERSED) {
-        queue!(stdout, SetAttribute(Attribute::Reverse)).unwrap();
+        queue!(stdout, SetAttribute(Attribute::Reverse))?;
     }
+    Ok(())
 }
 
 // ── Summary card ───────────────────────────────────────────────
@@ -117,10 +118,10 @@ pub fn print_summary(
     json: bool,
     locale: Locale,
     render_mode: RenderMode,
-) {
+) -> anyhow::Result<()> {
     if json {
         output_json_summary(summary, requests);
-        return;
+        return Ok(());
     }
 
     let balance = summary
@@ -135,7 +136,11 @@ pub fn print_summary(
         .unwrap_or(("0".into(), "CNY".into()));
     let tokens = &summary.monthly_token_usage;
 
-    let bal_val = format!("{:.2} {}", balance.0.parse::<f64>().unwrap_or(0.0), balance.1);
+    let bal_val = format!(
+        "{:.2} {}",
+        balance.0.parse::<f64>().unwrap_or(0.0),
+        balance.1
+    );
     let cost_val = format!("{:.2} {}", cost.0.parse::<f64>().unwrap_or(0.0), cost.1);
     let req_val = format_num(requests);
     let tok_val = format_num(tokens.parse().unwrap_or(0));
@@ -186,7 +191,7 @@ pub fn print_summary(
         for (label, value) in labels.iter().zip(values.iter()) {
             println!("{:>w$}: {}", label, value, w = label_w);
         }
-        return;
+        return Ok(());
     }
 
     let title_w = UnicodeWidthStr::width(format!(" {} ", locale.t("header")).as_str());
@@ -221,7 +226,8 @@ pub fn print_summary(
     .block(block)
     .column_spacing(0);
 
-    render_inline(table, 8, card_w);
+    render_inline(table, 8, card_w)?;
+    Ok(())
 }
 
 // ── Usage card ─────────────────────────────────────────────────
@@ -232,10 +238,9 @@ pub fn print_usage(
     json: bool,
     locale: Locale,
     render_mode: RenderMode,
-) {
+) -> anyhow::Result<()> {
     let filtered: Vec<&DaySummary> = if let Some(model) = model_filter {
-        days
-            .iter()
+        days.iter()
             .filter(|d| model_matches(&d.model, model))
             .collect()
     } else {
@@ -244,12 +249,12 @@ pub fn print_usage(
 
     if filtered.is_empty() {
         println!("{}", locale.t("no_data"));
-        return;
+        return Ok(());
     }
 
     if json {
         output_json_usage(&filtered);
-        return;
+        return Ok(());
     }
 
     if render_mode == RenderMode::Ascii {
@@ -317,29 +322,37 @@ pub fn print_usage(
         }
 
         for (i, h) in headers.iter().enumerate() {
-            if i > 0 { print!(" | "); }
+            if i > 0 {
+                print!(" | ");
+            }
             print!("{:>w$}", h, w = widths[i]);
         }
         println!();
         for (i, w) in widths.iter().enumerate() {
-            if i > 0 { print!("-+-"); }
+            if i > 0 {
+                print!("-+-");
+            }
             print!("{:-<width$}", "", width = w);
         }
         println!();
         for row in &rows {
             for (i, cell) in row.iter().enumerate() {
-                if i > 0 { print!(" | "); }
+                if i > 0 {
+                    print!(" | ");
+                }
                 print!("{:>w$}", cell, w = widths[i]);
             }
             println!();
         }
         for (i, cell) in total_row.iter().enumerate() {
-            if i > 0 { print!(" | "); }
+            if i > 0 {
+                print!(" | ");
+            }
             print!("{:>w$}", cell, w = widths[i]);
         }
         println!();
 
-        return;
+        return Ok(());
     }
 
     let bold = Style::new().add_modifier(Modifier::BOLD);
@@ -350,9 +363,7 @@ pub fn print_usage(
     let header_bg = render_mode.color(C_HEADER_BG);
     let row_even_bg = render_mode.color(C_ROW_EVEN_BG);
 
-    let header_style = bold
-        .fg(render_mode.color(C_WHITE))
-        .bg(header_bg);
+    let header_style = bold.fg(render_mode.color(C_WHITE)).bg(header_bg);
     let total_style = bold.fg(gold);
     let row_even = Style::new().bg(row_even_bg);
     let row_odd = Style::new();
@@ -395,11 +406,26 @@ pub fn print_usage(
             let style = if i % 2 == 0 { row_even } else { row_odd };
             Row::new(vec![
                 Cell::from(Span::styled(d.date.clone(), dim)),
-                cell_white(format_num(d.prompt_tokens), render_mode),
-                cell_white(format_num(d.cache_hit_tokens), render_mode),
-                cell_white(format_num(d.cache_miss_tokens), render_mode),
-                cell_white(format_num(d.response_tokens), render_mode),
-                cell_white(format_num(d.requests), render_mode),
+                Cell::from(Span::styled(
+                    format_num(d.prompt_tokens),
+                    Style::new().fg(render_mode.color(C_WHITE)),
+                )),
+                Cell::from(Span::styled(
+                    format_num(d.cache_hit_tokens),
+                    Style::new().fg(render_mode.color(C_WHITE)),
+                )),
+                Cell::from(Span::styled(
+                    format_num(d.cache_miss_tokens),
+                    Style::new().fg(render_mode.color(C_WHITE)),
+                )),
+                Cell::from(Span::styled(
+                    format_num(d.response_tokens),
+                    Style::new().fg(render_mode.color(C_WHITE)),
+                )),
+                Cell::from(Span::styled(
+                    format_num(d.requests),
+                    Style::new().fg(render_mode.color(C_WHITE)),
+                )),
                 Cell::from(Span::styled(
                     cost_s,
                     Style::new().fg(render_mode.color(C_COST_DIM)),
@@ -454,45 +480,25 @@ pub fn print_usage(
     )
     .column_spacing(1);
 
-    render_inline(table, filtered.len() + 6, 86);
+    render_inline(table, filtered.len() + 6, 86)?;
+    Ok(())
 }
 
 // ── Inline render via crossterm ────────────────────────────────
 
-fn render_inline(widget: impl Widget, height: usize, width: usize) {
+fn render_inline(widget: impl Widget, height: usize, width: usize) -> anyhow::Result<()> {
     let area = Rect::new(0, 0, width as u16, height as u16);
     let mut buffer = Buffer::empty(area);
     widget.render(area, &mut buffer);
 
-    // First pass: collect raw text to trim trailing empty lines
-    let mut text_lines: Vec<String> = Vec::with_capacity(height);
-    for y in 0..height {
-        let mut line = String::with_capacity(width * 4);
-        let mut skip = 0usize;
-        for x in 0..width {
-            if skip > 0 {
-                skip -= 1;
-                continue;
-            }
-            if let Some(cell) = buffer.cell((x as u16, y as u16)) {
-                let sym = cell.symbol();
-                if UnicodeWidthStr::width(sym) > 1 {
-                    skip = UnicodeWidthStr::width(sym) - 1;
-                }
-                line.push_str(sym);
-            }
-        }
-        text_lines.push(line.trim_end().to_string());
-    }
-    while text_lines.last().is_some_and(|l| l.is_empty()) {
-        text_lines.pop();
-    }
+    let mut lines: Vec<Vec<(Style, String)>> = Vec::with_capacity(height);
 
-    // Second pass: print with crossterm style commands
-    let mut stdout = stdout();
-    for (y, _) in text_lines.iter().enumerate() {
+    for y in 0..height {
+        let mut runs: Vec<(Style, String)> = Vec::new();
         let mut skip = 0usize;
         let mut current_style = Style::default();
+        let mut current_text = String::new();
+
         for x in 0..width {
             if skip > 0 {
                 skip -= 1;
@@ -500,20 +506,50 @@ fn render_inline(widget: impl Widget, height: usize, width: usize) {
             }
             if let Some(cell) = buffer.cell((x as u16, y as u16)) {
                 let sym = cell.symbol();
-                if UnicodeWidthStr::width(sym) > 1 {
-                    skip = UnicodeWidthStr::width(sym) - 1;
+                let w = UnicodeWidthStr::width(sym);
+                if w > 1 {
+                    skip = w - 1;
                 }
                 let style = cell.style();
-                if style != current_style {
-                    apply_style(&mut stdout, style);
+                if style == current_style {
+                    current_text.push_str(sym);
+                } else {
+                    if !current_text.is_empty() {
+                        runs.push((current_style, current_text));
+                    }
                     current_style = style;
+                    current_text = sym.to_string();
                 }
-                queue!(stdout, Print(sym)).unwrap();
             }
         }
-        queue!(stdout, ResetColor, Print("\n")).unwrap();
+        if !current_text.is_empty() {
+            runs.push((current_style, current_text));
+        }
+        lines.push(runs);
     }
-    stdout.flush().unwrap();
+
+    while lines.last().is_some_and(|runs| {
+        runs.is_empty()
+            || runs
+                .iter()
+                .map(|(_, t)| t.as_str())
+                .collect::<String>()
+                .trim()
+                .is_empty()
+    }) {
+        lines.pop();
+    }
+
+    let mut stdout = stdout();
+    for runs in &lines {
+        for (style, text) in runs {
+            apply_style(&mut stdout, *style)?;
+            queue!(stdout, Print(text))?;
+        }
+        queue!(stdout, ResetColor, Print("\n"))?;
+    }
+    stdout.flush()?;
+    Ok(())
 }
 
 fn output_json_summary(summary: &UserSummaryData, requests: u64) {
@@ -566,14 +602,10 @@ fn output_json_usage(days: &[&DaySummary]) {
     }
 }
 
-fn cell_white(text: String, render_mode: RenderMode) -> Cell<'static> {
-    Cell::from(Span::styled(text, Style::new().fg(render_mode.color(C_WHITE))))
-}
-
 fn model_matches(actual: &str, filter: &str) -> bool {
     let a = actual.to_lowercase();
     let f = filter.to_lowercase();
-    a == f || a.contains(&f) || f.contains(&a)
+    a == f || a.contains(&f)
 }
 
 fn format_num(n: u64) -> String {
