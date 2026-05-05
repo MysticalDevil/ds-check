@@ -32,6 +32,24 @@ const C_HEADER_BG: Color = Color::Rgb(50, 50, 55);
 const C_ROW_EVEN_BG: Color = Color::Rgb(26, 26, 32);
 const C_COST_DIM: Color = Color::Rgb(0xCC, 0xAA, 0x00);
 
+// ── Layout constants ───────────────────────────────────────────
+
+// Summary card: Block::bordered() + Padding::symmetric(3, 1)
+const SUMMARY_BORDER_W: usize = 2; // left + right border chars
+const SUMMARY_BORDER_H: usize = 2; // top + bottom border chars
+const SUMMARY_H_PAD: usize = 6; // Padding::symmetric(3, _) horizontal = 3*2
+const SUMMARY_V_PAD: usize = 2; // Padding::symmetric(_, 1) vertical = 1+1
+const SUMMARY_COL_EXTRA: usize = 2; // extra "  " appended to label text
+const SUMMARY_TITLE_MARGIN: usize = 4; // minimum margin for block title
+const SUMMARY_DATA_ROWS: usize = 4; // balance, cost, requests, tokens
+
+// Usage table: Block::bordered() + Padding::symmetric(1, 1) + column_spacing(1)
+const USAGE_BORDER_H: usize = 2;
+const USAGE_V_PAD: usize = 2; // Padding::symmetric(_, 1) vertical
+const USAGE_HEADER_ROW: usize = 1;
+const USAGE_FOOTER_ROW: usize = 1;
+const USAGE_TABLE_WIDTH: usize = 86; // derived from header text + column constraints
+
 impl RenderMode {
     pub fn from_env() -> Self {
         std::env::var("DSCHECK_RENDER")
@@ -195,7 +213,8 @@ pub fn print_summary(
     }
 
     let title_w = UnicodeWidthStr::width(format!(" {} ", locale.t("header")).as_str());
-    let card_w = (label_w + value_w + 10).max(title_w + 4);
+    let card_w = (label_w + value_w + SUMMARY_COL_EXTRA + SUMMARY_BORDER_W + SUMMARY_H_PAD)
+        .max(title_w + SUMMARY_TITLE_MARGIN);
 
     let rows: Vec<Row> = labels
         .iter()
@@ -226,7 +245,11 @@ pub fn print_summary(
     .block(block)
     .column_spacing(0);
 
-    render_inline(table, 8, card_w)?;
+    render_inline(
+        table,
+        SUMMARY_DATA_ROWS + SUMMARY_V_PAD + SUMMARY_BORDER_H,
+        card_w,
+    )?;
     Ok(())
 }
 
@@ -480,7 +503,11 @@ pub fn print_usage(
     )
     .column_spacing(1);
 
-    render_inline(table, filtered.len() + 6, 86)?;
+    render_inline(
+        table,
+        filtered.len() + USAGE_HEADER_ROW + USAGE_FOOTER_ROW + USAGE_V_PAD + USAGE_BORDER_H,
+        USAGE_TABLE_WIDTH,
+    )?;
     Ok(())
 }
 
