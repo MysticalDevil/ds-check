@@ -238,7 +238,7 @@ pub fn print_summary(
     let table = Table::new(
         rows,
         [
-            Constraint::Length(label_w as u16 + 2),
+            Constraint::Length(label_w as u16 + SUMMARY_COL_EXTRA as u16),
             Constraint::Length(value_w as u16),
         ],
     )

@@ -276,7 +276,7 @@ async fn cmd_models(
             .iter()
             .map(|m| serde_json::json!({"model": m}))
             .collect();
-        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
         for m in models {
             println!("{}", m);

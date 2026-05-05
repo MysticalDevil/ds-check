@@ -66,7 +66,7 @@ src/
 
 ### Module Responsibilities
 
-- **`main.rs`** — Defines `Cli` and `Commands` via `clap` derive. Global flags: `--json`, `--locale`. Subcommands: `auth`, `summary`, `usage`. Reads env vars `DSCHECK_MOCK`, `DSCHECK_RENDER`, `DSCHECK_LOCALE`.
+- **`main.rs`** — Defines `Cli` and `Commands` via `clap` derive. Global flags: `--json`, `--locale`. Subcommands: `auth`, `summary`, `usage`, `models`. Reads env vars `DSCHECK_MOCK`, `DSCHECK_RENDER`, `DSCHECK_LOCALE`.
 - **`api.rs`** — `BASE_URL = "https://platform.deepseek.com"`. Generic `api_get<T>()` helper. Endpoints:
   - `/auth-api/v0/users/current`
   - `/api/v0/users/get_user_summary`
@@ -126,9 +126,9 @@ ASCII mode strips all colors (`Color::Reset`). Note: ASCII mode currently overri
 
 ## Testing Strategy
 
-**There are currently no automated unit or integration tests.**
+**Unit tests** exist in `api.rs`, `auth.rs`, `i18n.rs`, `output.rs`. **Integration tests** in `tests/integration.rs` run the CLI binary with `DSCHECK_MOCK=1`.
 
-Testing is done manually via the mock mode:
+Manual testing via mock mode:
 
 ```bash
 # Mock auth
