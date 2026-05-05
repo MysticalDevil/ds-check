@@ -16,7 +16,8 @@ use std::io::Write;
     name = "ds-check",
     version,
     about = "DeepSeek platform usage CLI tool",
-    after_help = "Examples:\n  ds-check                  Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
+    color = clap::ColorChoice::Auto,
+    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
 )]
 struct Cli {
     #[arg(short, long, global = true, help = "Output as JSON")]
@@ -40,6 +41,8 @@ enum Commands {
         #[arg(help = "DeepSeek API token (leave empty for interactive input)")]
         token: Option<String>,
     },
+    #[command(about = "Show usage summary (balance, monthly cost, requests)")]
+    Summary,
     #[command(about = "Show detailed usage by day and model")]
     Usage {
         #[arg(short, long, help = "Month (1-12, default: current)")]
@@ -81,9 +84,19 @@ async fn main() -> anyhow::Result<()> {
     let locale = get_locale(&cli);
     let render_mode = get_render_mode();
 
+    // ASCII mode forces English locale for pure ASCII output
+    let locale = if render_mode == output::RenderMode::Ascii {
+        Locale::EnUS
+    } else {
+        locale
+    };
+
     match &cli.command {
         Some(Commands::Auth { token }) => {
             cmd_auth(token, &locale).await?;
+        }
+        Some(Commands::Summary) => {
+            cmd_summary(cli.json, &locale, render_mode).await?;
         }
         Some(Commands::Usage { month, year, model }) => {
             cmd_usage(
@@ -97,7 +110,8 @@ async fn main() -> anyhow::Result<()> {
             .await?;
         }
         None => {
-            cmd_summary(cli.json, &locale, render_mode).await?;
+            println!("{}", locale.t("use_help"));
+            std::process::exit(1);
         }
     }
 
@@ -108,6 +122,7 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
     let token = match token_opt {
         Some(t) => t.clone(),
         None => {
+            println!("{}", locale.t("token_help"));
             print!("{}", locale.t("enter_token"));
             std::io::stdout().flush()?;
             let mut input = String::new();
@@ -207,6 +222,36 @@ async fn cmd_usage(
     };
 
     let days = api::merge_usage(&amount, &cost);
-    output::print_usage(&days, model, json, *locale, render_mode);
+
+    match model {
+        Some("list") => {
+            let mut models: Vec<&str> = days
+                .iter()
+                .map(|d| d.model.as_str())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            models.sort();
+            for m in models {
+                println!("{}", m);
+            }
+        }
+        Some("all") => {
+            let mut models: Vec<&str> = days
+                .iter()
+                .map(|d| d.model.as_str())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            models.sort();
+            for m in models {
+                output::print_usage(&days, Some(m), json, *locale, render_mode);
+            }
+        }
+        _ => {
+            output::print_usage(&days, model, json, *locale, render_mode);
+        }
+    }
+
     Ok(())
 }
