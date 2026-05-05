@@ -22,8 +22,13 @@
 | `anyhow` | Ergonomic error handling |
 | `dirs` | XDG config directory resolution |
 | `chrono` | Date/time handling |
-| `ratatui` | Terminal UI rendering (tables, borders, colors) |
-| `unicode-width` | CJK / wide-character width calculation |
+| `ratatui` | Terminal UI widget construction (Table, Block, Row) |
+| `crossterm` | Terminal ANSI color/style commands (queue, SetForegroundColor, etc.) |
+| `unicode-width` | CJK / wide-character display width calculation |
+
+### Why crossterm is a direct dependency
+
+ratatui renders widgets to an in-memory `Buffer`. The buffer stores logical `Cell` objects (char + `ratatui::style::Style`), not rendered ANSI escape codes. To produce colored terminal output, we iterate buffer cells at print time and use `crossterm::queue!` to emit `SetForegroundColor`, `SetAttribute(Bold)`, etc. for each cell's style. This is NOT something ratatui handles — the backend would, but we bypass the backend to avoid entering raw mode (we're a one-shot CLI, not an interactive TUI).
 
 ## Build & Run
 
@@ -71,9 +76,9 @@ src/
 - **`auth.rs`** — Stores `AuthConfig` (token, nickname, email, currency) as pretty-printed JSON at `$XDG_CONFIG_HOME/ds-check/auth.json`.
 - **`i18n.rs`** — `Locale` enum with `from_str()`, `detect()` (reads `LANG`), and `t(key)` for localized strings.
 - **`mock.rs`** — `mock_user_summary()`, `mock_usage_amount()`, `mock_usage_cost()`. Cost mock uses hard-coded rates: cache_hit 0.025/1M, cache_miss 0.55/1M, response 2.19/1M.
-- **`output.rs`** — Two render paths:
-  - **Unicode mode**: Uses `ratatui` widgets (`Table`, `Block`, `Row`) rendered into an in-memory `Buffer`, then converted to ANSI escape sequences for inline terminal output.
-  - **ASCII mode**: Plain text with `=` headers and `|` delimited tables, no ANSI colors.
+- **`output.rs`** — Three render paths:
+  - **Unicode mode**: ratatui `Table`/`Block` widgets → in-memory `Buffer` → crossterm ANSI color commands for inline terminal output.
+  - **ASCII mode**: Plain text with `=` headers and `|` delimited tables, no ANSI colors. Bypasses ratatui entirely because ratatui's `BorderType::Plain` uses Unicode single-line box-drawing characters (`┌│└` U+2500 series), not pure ASCII (`+-|`). There is no ratatui border set for pure ASCII.
   - **JSON mode**: Pretty-printed JSON via `serde_json`.
 
 ## Development Conventions
@@ -103,7 +108,7 @@ When modifying UI output, respect the existing palette:
 | `C_ROW_EVEN_BG` | Rgb(26,26,32) | Alternating row background |
 | `C_COST_DIM` | Rgb(0xCC,0xAA,0x00) | Cost column in usage table |
 
-ASCII mode strips all colors (`Color::Reset`) and forces `Locale::EnUS`.
+ASCII mode strips all colors (`Color::Reset`). Note: ASCII mode currently overrides locale to `Locale::EnUS` — this is a known issue (REVIEW.md #6), CJK text is valid UTF-8 and should be preserved.
 
 ### Adding a New Locale
 
