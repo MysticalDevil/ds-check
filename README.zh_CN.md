@@ -8,6 +8,8 @@
 - 追踪 API 请求次数和 Token 用量
 - 按模型和 Token 类型查看每日用量明细
 - 模型筛选：列出所有模型、逐模型渲染表格、子串匹配
+- **可选 API Key 支持**：通过 `api.deepseek.com/models` 获取全量模型列表
+- **模型定价**：缓存每百万 tokens 价格表（运行 `python3 scripts/fetch_pricing.py` 更新）
 - 多语言支持：zh_CN、zh_TW、en_US、ja_JP
 - JSON 输出模式，便于脚本集成
 - ASCII / Unicode 渲染模式
@@ -45,8 +47,11 @@ ds-check summary
 ### 登录认证
 
 ```bash
-# 直接传入 Token
+# 传入平台 Token
 ds-check auth sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# 同时保存 API Key（用于 api.deepseek.com 接口）
+ds-check auth sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx --api-key sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # 交互式输入（会显示 Token 获取地址）
 ds-check auth
@@ -54,15 +59,18 @@ ds-check auth
 
 Token 和用户信息存储在 `$XDG_CONFIG_HOME/ds-check/auth.json`。
 
+**两种凭证**：
+- **平台 Token**（`<token>`）：来自 `platform.deepseek.com` 的 Bearer Token，用于用量/余额查询。
+- **API Key**（`--api-key`）：来自 `platform.deepseek.com/api_keys`，用于通过 OpenAI 兼容 API 获取全量模型列表。
+
 ### 列出模型
 
 ```bash
-# 当月使用的模型
+# 从用量数据推导当月使用的模型，或配置了 API Key 时获取全量列表
 ds-check models
-
-# 指定月份的模型
-ds-check models -m 4 -y 2026
 ```
+
+> 配置了 API Key（`ds-check auth <token> --api-key <key>`）时，`models` 自动调用 `api.deepseek.com/models` 获取完整列表。未配置时回退到用量推导模式，并在 stderr 提示用户。
 
 ### 查看详细用量
 
@@ -85,6 +93,7 @@ ds-check summary --json
 ds-check usage --json -m 5
 ds-check usage --json -M flash
 ds-check models --json
+ds-check price --json
 ```
 
 ### 切换语言
@@ -98,12 +107,26 @@ ds-check --locale ja_JP usage
 
 支持的语言：`zh_CN`、`zh_TW`、`en_US`、`ja_JP`。
 
+### 查看模型定价
+
+```bash
+# 显示定价表（需要缓存数据）
+python3 scripts/fetch_pricing.py  # 先更新缓存
+ds-check price
+
+# JSON 输出
+ds-check price --json
+```
+
+价格为每百万 tokens 的 CNY 单价。数据缓存于 `$XDG_CACHE_HOME/ds-check/pricing.json`（运行 `python3 scripts/fetch_pricing.py` 获取）。无需登录即可查看。
+
 ### ASCII 渲染模式
 
 ```bash
 # 纯 ASCII 表格，无 Unicode 边框和颜色
 DSCHECK_RENDER=ascii ds-check summary
 DSCHECK_RENDER=ascii ds-check usage
+DSCHECK_RENDER=ascii ds-check price
 ```
 
 ASCII 模式强制使用英文标签，避免输出 Unicode 字符。
