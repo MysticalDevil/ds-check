@@ -1,5 +1,6 @@
 mod api;
 mod auth;
+mod cache;
 mod i18n;
 mod mock;
 mod output;
@@ -17,7 +18,7 @@ use std::io::Write;
     version,
     about = "DeepSeek platform usage CLI tool",
     color = clap::ColorChoice::Auto,
-    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check models           List all models used\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
+    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check models           List all models used\n  ds-check price            Show model pricing\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
 )]
 struct Cli {
     #[arg(short, long, global = true, help = "Output as JSON")]
@@ -40,6 +41,8 @@ enum Commands {
     Auth {
         #[arg(help = "DeepSeek API token (leave empty for interactive input)")]
         token: Option<String>,
+        #[arg(long, help = "Optional DeepSeek API Key for api.deepseek.com endpoints")]
+        api_key: Option<String>,
     },
     #[command(about = "Show usage summary (balance, monthly cost, requests)")]
     Summary,
@@ -53,12 +56,9 @@ enum Commands {
         model: Option<String>,
     },
     #[command(about = "List all models used in the current month")]
-    Models {
-        #[arg(short, long, help = "Month (1-12, default: current)")]
-        month: Option<u32>,
-        #[arg(short, long, help = "Year (default: current)")]
-        year: Option<i32>,
-    },
+    Models,
+    #[command(about = "Show model pricing per 1M tokens")]
+    Price,
 }
 
 fn get_locale(cli: &Cli) -> Locale {
@@ -83,7 +83,8 @@ async fn main() -> anyhow::Result<()> {
     let locale = get_locale(&cli);
     let render_mode = RenderMode::from_env();
 
-    // ASCII mode forces English locale for pure ASCII output
+    // ASCII mode forces English locale because manual println tables
+    // use fixed-width alignment that breaks with CJK characters
     let locale = if render_mode == output::RenderMode::Ascii {
         Locale::EnUS
     } else {
@@ -91,8 +92,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     match &cli.command {
-        Some(Commands::Auth { token }) => {
-            cmd_auth(token, &locale).await?;
+        Some(Commands::Auth { token, api_key }) => {
+            cmd_auth(token, api_key, &locale).await?;
         }
         Some(Commands::Summary) => {
             cmd_summary(cli.json, &locale, render_mode).await?;
@@ -108,8 +109,11 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
         }
-        Some(Commands::Models { month, year }) => {
-            cmd_models(*month, *year, cli.json, &locale).await?;
+        Some(Commands::Models) => {
+            cmd_models(cli.json, &locale).await?;
+        }
+        Some(Commands::Price) => {
+            cmd_price(cli.json, &locale, render_mode)?;
         }
         None => {
             println!("{}", locale.t("use_help"));
@@ -120,7 +124,14 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result<()> {
+fn cmd_price(json: bool, locale: &Locale, render_mode: RenderMode) -> anyhow::Result<()> {
+    let data = api::load_pricing()
+        .with_context(|| locale.t("pricing_not_found"))?;
+    output::print_pricing(&data, json, *locale, render_mode)?;
+    Ok(())
+}
+
+async fn cmd_auth(token_opt: &Option<String>, api_key_opt: &Option<String>, locale: &Locale) -> anyhow::Result<()> {
     let token = match token_opt {
         Some(t) => t.clone(),
         None => {
@@ -144,7 +155,7 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
             "CNY".to_string(),
         )
     } else {
-        let user = api::get_current_user(&token)
+        let user = api::get_current_user(&token, locale)
             .await
             .context(locale.t("invalid_token"))?;
         (user.id_profile.name, user.email, user.currency)
@@ -155,6 +166,7 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
         nickname: nickname.clone(),
         email,
         currency,
+        api_key: api_key_opt.clone(),
     };
 
     auth::save(&config)?;
@@ -165,6 +177,9 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
             .t("token_saved")
             .replace("{}", &auth::config_path_str())
     );
+    if api_key_opt.is_some() {
+        println!("{}", locale.t("api_key_saved"));
+    }
 
     Ok(())
 }
@@ -178,8 +193,8 @@ async fn cmd_summary(json: bool, locale: &Locale, render_mode: RenderMode) -> an
     } else {
         let now = chrono::Local::now();
         tokio::try_join!(
-            api::get_user_summary(&config.token),
-            api::get_usage_amount(&config.token, now.month(), now.year()),
+            api::get_user_summary(&config.token, locale),
+            api::get_usage_amount(&config.token, now.month(), now.year(), locale),
         )?
     };
 
@@ -214,8 +229,8 @@ async fn cmd_usage(
         (mock::mock_usage_amount(), mock::mock_usage_cost())
     } else {
         tokio::try_join!(
-            api::get_usage_amount(&config.token, month, year),
-            api::get_usage_cost(&config.token, month, year),
+            api::get_usage_amount(&config.token, month, year, locale),
+            api::get_usage_cost(&config.token, month, year, locale),
         )?
     };
 
@@ -243,33 +258,37 @@ async fn cmd_usage(
     Ok(())
 }
 
-async fn cmd_models(
-    month: Option<u32>,
-    year: Option<i32>,
-    json: bool,
-    locale: &Locale,
-) -> anyhow::Result<()> {
+async fn cmd_models(json: bool, locale: &Locale) -> anyhow::Result<()> {
     let config = auth::load()?
         .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
-    let now = chrono::Local::now();
-    let month = month.unwrap_or(now.month());
-    let year = year.unwrap_or(now.year());
-
-    let amount = if is_mock() {
-        mock::mock_usage_amount()
+    // Prefer API Key route for full model list
+    let models: Vec<String> = if let Some(ref api_key) = config.api_key {
+        if is_mock() {
+            mock::mock_api_models()
+        } else {
+            api::get_models(api_key).await?
+        }
     } else {
-        api::get_usage_amount(&config.token, month, year).await?
-    };
+        // Fallback: derive models from current month usage data
+        let now = chrono::Local::now();
 
-    let days = api::merge_usage(&amount, &[]);
-    let mut models: Vec<&str> = days
-        .iter()
-        .map(|d| d.model.as_str())
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
-        .collect();
-    models.sort();
+        let amount = if is_mock() {
+            mock::mock_usage_amount()
+        } else {
+            api::get_usage_amount(&config.token, now.month(), now.year(), locale).await?
+        };
+
+        let days = api::merge_usage(&amount, &[]);
+        let mut m: Vec<String> = days
+            .iter()
+            .map(|d| d.model.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        m.sort();
+        m
+    };
 
     if json {
         let output: Vec<serde_json::Value> = models
@@ -281,6 +300,10 @@ async fn cmd_models(
         for m in models {
             println!("{}", m);
         }
+    }
+
+    if config.api_key.is_none() {
+        eprintln!("* {}", locale.t("api_key_hint"));
     }
 
     Ok(())

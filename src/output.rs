@@ -1,4 +1,4 @@
-use crate::api::{DaySummary, UserSummaryData};
+use crate::api::{DaySummary, PricingData, UserSummaryData};
 use crate::i18n::Locale;
 use crossterm::{queue, style::*};
 use ratatui::buffer::Buffer;
@@ -49,6 +49,12 @@ const USAGE_V_PAD: usize = 2; // Padding::symmetric(_, 1) vertical
 const USAGE_HEADER_ROW: usize = 1;
 const USAGE_FOOTER_ROW: usize = 1;
 const USAGE_TABLE_WIDTH: usize = 86; // derived from header text + column constraints
+
+// Pricing table: Block::bordered() + Padding::symmetric(1, 1) + header
+const PRICE_BORDER_H: usize = 2;
+const PRICE_V_PAD: usize = 2; // Padding::symmetric(_, 1) vertical
+const PRICE_HEADER_ROW: usize = 1;
+const PRICE_WIDTH: usize = 78;
 
 impl RenderMode {
     pub fn from_env() -> Self {
@@ -138,7 +144,7 @@ pub fn print_summary(
     render_mode: RenderMode,
 ) -> anyhow::Result<()> {
     if json {
-        output_json_summary(summary, requests);
+        output_json_summary(summary, requests)?;
         return Ok(());
     }
 
@@ -276,7 +282,7 @@ pub fn print_usage(
     }
 
     if json {
-        output_json_usage(&filtered);
+        output_json_usage(&filtered)?;
         return Ok(());
     }
 
@@ -511,6 +517,137 @@ pub fn print_usage(
     Ok(())
 }
 
+// ── Pricing card ───────────────────────────────────────────────
+
+pub fn print_pricing(
+    data: &PricingData,
+    json: bool,
+    locale: Locale,
+    render_mode: RenderMode,
+) -> anyhow::Result<()> {
+    if json {
+        output_json_pricing(data)?;
+        return Ok(());
+    }
+
+    let headers = [
+        locale.t("price_model"),
+        locale.t("price_input_cache_hit"),
+        locale.t("price_input_cache_miss"),
+        locale.t("price_output"),
+    ];
+
+    let currency = locale.t("currency_symbol");
+
+    if render_mode == RenderMode::Ascii {
+        let title = locale.t("price_header");
+        let title_w = UnicodeWidthStr::width(title.as_str());
+        println!("{}", title);
+        println!("{}", "=".repeat(title_w));
+        for m in &data.models {
+            println!(
+                "{}: {}{} / {}{} / {}{}",
+                m.model, m.input_cache_hit, currency,
+                m.input_cache_miss, currency,
+                m.output, currency,
+            );
+        }
+        if !data.note.is_empty() {
+            println!("* {}", data.note);
+        }
+        return Ok(());
+    }
+
+    let bold = Style::new().add_modifier(Modifier::BOLD);
+    let gold = render_mode.color(C_TITLE);
+    let cyan = render_mode.color(C_BORDER);
+    let header_bg = render_mode.color(C_HEADER_BG);
+    let row_even_bg = render_mode.color(C_ROW_EVEN_BG);
+
+    let header_style = bold.fg(render_mode.color(C_WHITE)).bg(header_bg);
+    let row_even = Style::new().bg(row_even_bg);
+    let row_odd = Style::new();
+
+    let header = Row::new(
+        headers
+            .iter()
+            .map(|h| Cell::from(Span::styled(h.clone(), header_style))),
+    )
+    .style(header_style);
+
+    let data_rows: Vec<Row> = data
+        .models
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let style = if i % 2 == 0 { row_even } else { row_odd };
+            Row::new(vec![
+                Cell::from(Span::styled(
+                    m.model.clone(),
+                    Style::new().fg(render_mode.color(C_WHITE)),
+                )),
+                Cell::from(Span::styled(
+                    format!("{}{}", m.input_cache_hit, currency),
+                    Style::new().fg(render_mode.color(C_BALANCE)),
+                )),
+                Cell::from(Span::styled(
+                    format!("{}{}", m.input_cache_miss, currency),
+                    Style::new().fg(render_mode.color(C_COST_DIM)),
+                )),
+                Cell::from(Span::styled(
+                    format!("{}{}", m.output, currency),
+                    Style::new().fg(render_mode.color(C_REQUESTS)),
+                )),
+            ])
+            .style(style)
+        })
+        .collect();
+
+    let title = format!(" {} ", locale.t("price_header"));
+    let table = Table::new(
+        data_rows,
+        [
+            Constraint::Min(20),
+            Constraint::Min(16),
+            Constraint::Min(16),
+            Constraint::Min(10),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::bordered()
+            .border_type(render_mode.border_type())
+            .title(title)
+            .title_style(bold.fg(gold))
+            .border_style(Style::new().fg(cyan))
+            .padding(Padding::symmetric(1, 1)),
+    )
+    .column_spacing(1);
+
+    render_inline(
+        table,
+        data.models.len() + PRICE_HEADER_ROW + PRICE_V_PAD + PRICE_BORDER_H,
+        PRICE_WIDTH,
+    )?;
+
+    if !data.note.is_empty() {
+        println!("\n* {}", data.note);
+    }
+
+    Ok(())
+}
+
+fn output_json_pricing(data: &PricingData) -> anyhow::Result<()> {
+    let output = serde_json::json!({
+        "currency": data.currency,
+        "unit": data.unit,
+        "note": data.note,
+        "models": data.models,
+    });
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
 // ── Inline render via crossterm ────────────────────────────────
 
 fn render_inline(widget: impl Widget, height: usize, width: usize) -> anyhow::Result<()> {
@@ -556,13 +693,7 @@ fn render_inline(widget: impl Widget, height: usize, width: usize) -> anyhow::Re
     }
 
     while lines.last().is_some_and(|runs| {
-        runs.is_empty()
-            || runs
-                .iter()
-                .map(|(_, t)| t.as_str())
-                .collect::<String>()
-                .trim()
-                .is_empty()
+        runs.iter().all(|(_, t)| t.trim().is_empty())
     }) {
         lines.pop();
     }
@@ -579,7 +710,7 @@ fn render_inline(widget: impl Widget, height: usize, width: usize) -> anyhow::Re
     Ok(())
 }
 
-fn output_json_summary(summary: &UserSummaryData, requests: u64) {
+fn output_json_summary(summary: &UserSummaryData, requests: u64) -> anyhow::Result<()> {
     let balance = summary
         .normal_wallets
         .first()
@@ -603,12 +734,11 @@ fn output_json_summary(summary: &UserSummaryData, requests: u64) {
         "api_requests": requests,
         "tokens": summary.monthly_token_usage.parse::<u64>().unwrap_or(0),
     });
-    if let Ok(s) = serde_json::to_string_pretty(&output) {
-        println!("{}", s);
-    }
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
 }
 
-fn output_json_usage(days: &[&DaySummary]) {
+fn output_json_usage(days: &[&DaySummary]) -> anyhow::Result<()> {
     let output: Vec<serde_json::Value> = days
         .iter()
         .map(|d| {
@@ -624,9 +754,8 @@ fn output_json_usage(days: &[&DaySummary]) {
             })
         })
         .collect();
-    if let Ok(s) = serde_json::to_string_pretty(&output) {
-        println!("{}", s);
-    }
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
 }
 
 fn model_matches(actual: &str, filter: &str) -> bool {

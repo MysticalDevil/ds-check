@@ -1,8 +1,9 @@
 use anyhow::Context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
 const BASE_URL: &str = "https://platform.deepseek.com";
+const API_BASE_URL: &str = "https://api.deepseek.com";
 
 static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
@@ -13,34 +14,34 @@ pub const USAGE_PROMPT_CACHE_MISS: &str = "PROMPT_CACHE_MISS_TOKEN";
 pub const USAGE_RESPONSE: &str = "RESPONSE_TOKEN";
 pub const USAGE_REQUEST: &str = "REQUEST";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BizResponse<T> {
     pub code: i32,
     pub data: Option<BizData<T>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct BizData<T> {
     pub biz_code: i32,
     pub biz_data: T,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct IdProfile {
     pub name: String,
     pub email: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CurrentUserData {
     pub id_profile: IdProfile,
     pub email: String,
     pub currency: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct Wallet {
     pub currency: String,
@@ -48,13 +49,13 @@ pub struct Wallet {
     pub token_estimation: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MonthlyCost {
     pub currency: String,
     pub amount: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct UserSummaryData {
     pub normal_wallets: Vec<Wallet>,
@@ -66,26 +67,26 @@ pub struct UserSummaryData {
     pub total_available_token_estimation: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UsageAmountData {
     pub total: Vec<ModelUsage>,
     pub days: Vec<DayUsage>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelUsage {
     pub model: String,
     pub usage: Vec<UsageItem>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageItem {
     #[serde(rename = "type")]
     pub usage_type: String,
     pub amount: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DayUsage {
     pub date: String,
     pub data: Vec<ModelUsage>,
@@ -103,17 +104,27 @@ pub struct DaySummary {
     pub cost: f64,
 }
 
-async fn api_get<T: for<'de> Deserialize<'de>>(token: &str, path: &str) -> anyhow::Result<T> {
-    let url = format!("{}{}", BASE_URL, path);
-    let client = &*CLIENT;
+async fn api_get<T>(token: &str, path: &str, locale: &crate::i18n::Locale) -> anyhow::Result<T>
+where
+    T: for<'de> Deserialize<'de> + Serialize,
+{
+    // 1. Check cache
+    if let Some(cache_path) = crate::cache::cache_path(token, path)
+        && let Some(cached) = crate::cache::read_cache::<T>(&cache_path)
+    {
+        return Ok(cached);
+    }
 
-    let resp = client
+    // 2. Make HTTP request
+    let url = format!("{}{}", BASE_URL, path);
+
+    let resp = CLIENT
         .get(&url)
         .header("Authorization", format!("Bearer {}", token))
         .header("x-app-version", "20240425.0")
         .send()
         .await
-        .context("Network error")?;
+        .context(locale.t("network_error"))?;
 
     let body: serde_json::Value = resp.json().await.context("Parse response failed")?;
 
@@ -121,39 +132,111 @@ async fn api_get<T: for<'de> Deserialize<'de>>(token: &str, path: &str) -> anyho
         serde_json::from_value(body).context("Deserialize response failed")?;
 
     if biz_resp.code != 0 {
+        if biz_resp.code == 40003 {
+            anyhow::bail!("{}\n{}", locale.t("auth_expired"), locale.t("auth_hint"));
+        }
         anyhow::bail!("API error: code={}", biz_resp.code);
     }
 
-    biz_resp
+    let result = biz_resp
         .data
         .ok_or_else(|| anyhow::anyhow!("Empty response data"))
-        .map(|d| d.biz_data)
+        .map(|d| d.biz_data)?;
+
+    // 3. Write cache
+    if let Some(cache_path) = crate::cache::cache_path(token, path) {
+        let _ = crate::cache::write_cache(&cache_path, &result);
+    }
+
+    Ok(result)
 }
 
-pub async fn get_current_user(token: &str) -> anyhow::Result<CurrentUserData> {
-    api_get::<CurrentUserData>(token, "/auth-api/v0/users/current").await
+pub async fn get_current_user(token: &str, locale: &crate::i18n::Locale) -> anyhow::Result<CurrentUserData> {
+    api_get::<CurrentUserData>(token, "/auth-api/v0/users/current", locale).await
 }
 
-pub async fn get_user_summary(token: &str) -> anyhow::Result<UserSummaryData> {
-    api_get::<UserSummaryData>(token, "/api/v0/users/get_user_summary").await
+pub async fn get_user_summary(token: &str, locale: &crate::i18n::Locale) -> anyhow::Result<UserSummaryData> {
+    api_get::<UserSummaryData>(token, "/api/v0/users/get_user_summary", locale).await
 }
 
 pub async fn get_usage_amount(
     token: &str,
     month: u32,
     year: i32,
+    locale: &crate::i18n::Locale,
 ) -> anyhow::Result<UsageAmountData> {
     let path = format!("/api/v0/usage/amount?month={}&year={}", month, year);
-    api_get::<UsageAmountData>(token, &path).await
+    api_get::<UsageAmountData>(token, &path, locale).await
 }
 
 pub async fn get_usage_cost(
     token: &str,
     month: u32,
     year: i32,
+    locale: &crate::i18n::Locale,
 ) -> anyhow::Result<Vec<UsageAmountData>> {
     let path = format!("/api/v0/usage/cost?month={}&year={}", month, year);
-    api_get::<Vec<UsageAmountData>>(token, &path).await
+    api_get::<Vec<UsageAmountData>>(token, &path, locale).await
+}
+
+// ── Pricing (built-in JSON) ────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPricing {
+    pub model: String,
+    pub input_cache_hit: String,
+    pub input_cache_miss: String,
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingData {
+    pub currency: String,
+    pub unit: String,
+    #[serde(default)]
+    pub note: String,
+    pub models: Vec<ModelPricing>,
+}
+
+fn pricing_cache_path() -> Option<std::path::PathBuf> {
+    dirs::cache_dir().map(|p| p.join("ds-check").join("pricing.json"))
+}
+
+pub fn load_pricing() -> anyhow::Result<PricingData> {
+    let path = pricing_cache_path()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?;
+    let json = std::fs::read_to_string(&path)?;
+    let data: PricingData = serde_json::from_str(&json)?;
+    Ok(data)
+}
+
+// ── API Key interface (api.deepseek.com) ───────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiModel {
+    pub id: String,
+    pub object: String,
+    pub owned_by: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiModelList {
+    pub object: String,
+    pub data: Vec<ApiModel>,
+}
+
+pub async fn get_models(api_key: &str) -> anyhow::Result<Vec<String>> {
+    let resp = CLIENT
+        .get(format!("{}/models", API_BASE_URL))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .context("Network error")?;
+
+    let list: ApiModelList = resp.json().await.context("Parse response failed")?;
+    let models: Vec<String> = list.data.into_iter().map(|m| m.id).collect();
+    Ok(models)
 }
 
 pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<DaySummary> {

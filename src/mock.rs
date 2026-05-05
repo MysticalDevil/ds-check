@@ -35,6 +35,13 @@ pub fn mock_user_summary() -> api::UserSummaryData {
     }
 }
 
+pub fn mock_api_models() -> Vec<String> {
+    vec![
+        "deepseek-v4-flash".into(),
+        "deepseek-v4-pro".into(),
+    ]
+}
+
 pub fn mock_usage_amount() -> api::UsageAmountData {
     let today = today();
     let days: Vec<api::DayUsage> = (1..=days_in_month())
@@ -86,12 +93,19 @@ fn sum_usage_type(days: &[api::DayUsage], model: &str, usage_type: &str) -> u64 
         .sum()
 }
 
-fn deepseek_v4_token_cost(usage_type: &str, amount: &str) -> f64 {
+fn model_token_cost(model: &str, usage_type: &str, amount: &str) -> f64 {
     let tokens: f64 = amount.parse().unwrap_or(0.0);
+    let is_flash = model.contains("flash");
     match usage_type {
         api::USAGE_PROMPT_CACHE_HIT => tokens * 0.025 / 1_000_000.0,
-        api::USAGE_PROMPT_CACHE_MISS => tokens * 0.55 / 1_000_000.0,
-        api::USAGE_RESPONSE => tokens * 2.19 / 1_000_000.0,
+        api::USAGE_PROMPT_CACHE_MISS => {
+            let rate = if is_flash { 1.0 } else { 3.0 };
+            tokens * rate / 1_000_000.0
+        }
+        api::USAGE_RESPONSE => {
+            let rate = if is_flash { 2.0 } else { 6.0 };
+            tokens * rate / 1_000_000.0
+        }
         _ => 0.0,
     }
 }
@@ -104,7 +118,7 @@ fn convert_to_cost(model: &api::ModelUsage) -> api::ModelUsage {
             .iter()
             .map(|u| api::UsageItem {
                 usage_type: u.usage_type.clone(),
-                amount: format!("{:.10}", deepseek_v4_token_cost(&u.usage_type, &u.amount)),
+                amount: format!("{:.10}", model_token_cost(&model.model, &u.usage_type, &u.amount)),
             })
             .collect(),
     }

@@ -7,6 +7,8 @@ pub struct AuthConfig {
     pub nickname: String,
     pub email: String,
     pub currency: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
 }
 
 fn config_path() -> Option<PathBuf> {
@@ -60,6 +62,7 @@ mod tests {
             nickname: "TestUser".into(),
             email: "test@example.com".into(),
             currency: "CNY".into(),
+            api_key: None,
         }
     }
 
@@ -92,6 +95,7 @@ mod tests {
         let loaded = loaded.unwrap();
         assert_eq!(loaded.token, config.token);
         assert_eq!(loaded.nickname, config.nickname);
+        assert_eq!(loaded.api_key, config.api_key);
 
         // Clean up
         let _ = std::fs::remove_dir_all(&temp_dir);
