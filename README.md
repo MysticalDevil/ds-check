@@ -6,11 +6,12 @@ A CLI tool for checking DeepSeek platform usage, balance, and API consumption.
 
 ## Features
 
-- View account balance and monthly costs
+- View account balance and monthly costs (colorful card UI)
 - Track API request counts and token usage
 - Detailed daily usage breakdown by model and token type
-- Multi-locale support: zh_CN, zh_TW, en_US, ja_JP
+- Multi-locale support: `zh_CN`, `zh_TW`, `en_US`, `ja_JP`
 - JSON output mode for scripting
+- ASCII / Unicode render modes
 - Cross-platform (Linux, macOS, Windows)
 
 ## Installation
@@ -21,22 +22,25 @@ cargo install --path .
 
 ## Usage
 
-### Check balance and usage
+> Run `ds-check --help` for colored CLI help with all options.
+
+### View usage summary
 
 ```bash
-ds-check
+ds-check summary
 ```
 
-Output:
+Output (Unicode mode):
 
 ```
-============ DeepSeek Usage ============
-       User: nickname
-    Balance: 121.75 CNY
-Monthly Cost: 10.30 CNY
-API Requests: 785
-     Tokens: 82.56M
-========================================
+┏ DeepSeek Usage ━━━━━━━━━━━━━┓
+┃                             ┃
+┃   Balance       119.00 CNY  ┃
+┃   Monthly Cost  13.06 CNY   ┃
+┃   API Requests  950         ┃
+┃   Tokens        106.73M     ┃
+┃                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
 ### Authenticate
@@ -45,7 +49,7 @@ API Requests: 785
 # Provide token directly
 ds-check auth sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# Interactive prompt
+# Interactive prompt (shows token URL)
 ds-check auth
 ```
 
@@ -67,20 +71,28 @@ ds-check usage -M v4-pro
 ### Output as JSON
 
 ```bash
-ds-check --json
+ds-check summary --json
 ds-check usage --json -m 5
 ```
 
 ### Set locale
 
 ```bash
-ds-check --locale zh_CN
-ds-check --locale ja_JP
+ds-check --locale zh_CN summary
+ds-check --locale ja_JP usage
 ```
 
 Locale auto-detects from `LANG` environment variable when not specified.
 
 Supported locales: `zh_CN`, `zh_TW`, `en_US`, `ja_JP`.
+
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `DSCHECK_MOCK` | Set to `1` to use mock data (no network calls) |
+| `DSCHECK_RENDER` | Output style: `ascii` or `unicode` (default: `unicode`) |
+| `DSCHECK_LOCALE` | Set default locale, e.g. `zh_CN`, `en_US` |
 
 ## License
 
