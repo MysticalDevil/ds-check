@@ -7,19 +7,12 @@ fn today() -> chrono::NaiveDate {
 
 fn days_in_month() -> u32 {
     let today = today();
-    let y = today.year();
-    let m = today.month();
-    match m {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 => {
-            if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
-                29
-            } else {
-                28
-            }
-        }
-        _ => 30,
+    let days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let m = today.month() as usize;
+    if m == 2 && today.year() % 4 == 0 && (today.year() % 100 != 0 || today.year() % 400 == 0) {
+        29
+    } else {
+        days[m - 1]
     }
 }
 
@@ -66,19 +59,19 @@ pub fn mock_usage_amount() -> api::UsageAmountData {
 }
 
 fn model_usage_totals(days: &[api::DayUsage], model: &str) -> api::ModelUsage {
-    let hit: u64 = sum_usage_type(days, model, "PROMPT_CACHE_HIT_TOKEN");
-    let miss: u64 = sum_usage_type(days, model, "PROMPT_CACHE_MISS_TOKEN");
-    let response: u64 = sum_usage_type(days, model, "RESPONSE_TOKEN");
-    let requests: u64 = sum_usage_type(days, model, "REQUEST");
+    let hit: u64 = sum_usage_type(days, model, api::USAGE_PROMPT_CACHE_HIT);
+    let miss: u64 = sum_usage_type(days, model, api::USAGE_PROMPT_CACHE_MISS);
+    let response: u64 = sum_usage_type(days, model, api::USAGE_RESPONSE);
+    let requests: u64 = sum_usage_type(days, model, api::USAGE_REQUEST);
 
     model_usage(
         model,
         &[
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", &hit.to_string()),
-            ("PROMPT_CACHE_MISS_TOKEN", &miss.to_string()),
-            ("RESPONSE_TOKEN", &response.to_string()),
-            ("REQUEST", &requests.to_string()),
+            (api::USAGE_PROMPT_CACHE_HIT, &hit.to_string()),
+            (api::USAGE_PROMPT_CACHE_MISS, &miss.to_string()),
+            (api::USAGE_RESPONSE, &response.to_string()),
+            (api::USAGE_REQUEST, &requests.to_string()),
         ],
     )
 }
@@ -93,12 +86,12 @@ fn sum_usage_type(days: &[api::DayUsage], model: &str, usage_type: &str) -> u64 
         .sum()
 }
 
-fn calc_cost(usage_type: &str, amount: &str) -> f64 {
+fn deepseek_v4_token_cost(usage_type: &str, amount: &str) -> f64 {
     let tokens: f64 = amount.parse().unwrap_or(0.0);
     match usage_type {
-        "PROMPT_CACHE_HIT_TOKEN" => tokens * 0.025 / 1_000_000.0,
-        "PROMPT_CACHE_MISS_TOKEN" => tokens * 0.55 / 1_000_000.0,
-        "RESPONSE_TOKEN" => tokens * 2.19 / 1_000_000.0,
+        api::USAGE_PROMPT_CACHE_HIT => tokens * 0.025 / 1_000_000.0,
+        api::USAGE_PROMPT_CACHE_MISS => tokens * 0.55 / 1_000_000.0,
+        api::USAGE_RESPONSE => tokens * 2.19 / 1_000_000.0,
         _ => 0.0,
     }
 }
@@ -111,7 +104,7 @@ fn convert_to_cost(model: &api::ModelUsage) -> api::ModelUsage {
             .iter()
             .map(|u| api::UsageItem {
                 usage_type: u.usage_type.clone(),
-                amount: format!("{:.10}", calc_cost(&u.usage_type, &u.amount)),
+                amount: format!("{:.10}", deepseek_v4_token_cost(&u.usage_type, &u.amount)),
             })
             .collect(),
     }
@@ -151,10 +144,10 @@ fn empty_model(model: &str) -> api::ModelUsage {
         model,
         &[
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "0"),
-            ("PROMPT_CACHE_MISS_TOKEN", "0"),
-            ("RESPONSE_TOKEN", "0"),
-            ("REQUEST", "0"),
+            (api::USAGE_PROMPT_CACHE_HIT, "0"),
+            (api::USAGE_PROMPT_CACHE_MISS, "0"),
+            (api::USAGE_RESPONSE, "0"),
+            (api::USAGE_REQUEST, "0"),
         ],
     )
 }
@@ -163,38 +156,38 @@ fn mock_day_tokens(day: u32) -> Vec<(&'static str, &'static str)> {
     match day {
         1 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "1235072"),
-            ("PROMPT_CACHE_MISS_TOKEN", "259591"),
-            ("RESPONSE_TOKEN", "33927"),
-            ("REQUEST", "37"),
+            (api::USAGE_PROMPT_CACHE_HIT, "1235072"),
+            (api::USAGE_PROMPT_CACHE_MISS, "259591"),
+            (api::USAGE_RESPONSE, "33927"),
+            (api::USAGE_REQUEST, "37"),
         ],
         2 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "45691008"),
-            ("PROMPT_CACHE_MISS_TOKEN", "944444"),
-            ("RESPONSE_TOKEN", "284599"),
-            ("REQUEST", "432"),
+            (api::USAGE_PROMPT_CACHE_HIT, "45691008"),
+            (api::USAGE_PROMPT_CACHE_MISS, "944444"),
+            (api::USAGE_RESPONSE, "284599"),
+            (api::USAGE_REQUEST, "432"),
         ],
         3 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "12284672"),
-            ("PROMPT_CACHE_MISS_TOKEN", "70253"),
-            ("RESPONSE_TOKEN", "132405"),
-            ("REQUEST", "130"),
+            (api::USAGE_PROMPT_CACHE_HIT, "12284672"),
+            (api::USAGE_PROMPT_CACHE_MISS, "70253"),
+            (api::USAGE_RESPONSE, "132405"),
+            (api::USAGE_REQUEST, "130"),
         ],
         4 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "21178880"),
-            ("PROMPT_CACHE_MISS_TOKEN", "311968"),
-            ("RESPONSE_TOKEN", "138126"),
-            ("REQUEST", "186"),
+            (api::USAGE_PROMPT_CACHE_HIT, "21178880"),
+            (api::USAGE_PROMPT_CACHE_MISS, "311968"),
+            (api::USAGE_RESPONSE, "138126"),
+            (api::USAGE_REQUEST, "186"),
         ],
         _ => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "0"),
-            ("PROMPT_CACHE_MISS_TOKEN", "0"),
-            ("RESPONSE_TOKEN", "0"),
-            ("REQUEST", "0"),
+            (api::USAGE_PROMPT_CACHE_HIT, "0"),
+            (api::USAGE_PROMPT_CACHE_MISS, "0"),
+            (api::USAGE_RESPONSE, "0"),
+            (api::USAGE_REQUEST, "0"),
         ],
     }
 }
@@ -203,40 +196,38 @@ fn mock_flash_day_tokens(day: u32) -> Vec<(&'static str, &'static str)> {
     match day {
         1 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "512000"),
-            ("PROMPT_CACHE_MISS_TOKEN", "128000"),
-            ("RESPONSE_TOKEN", "45000"),
-            ("REQUEST", "120"),
+            (api::USAGE_PROMPT_CACHE_HIT, "512000"),
+            (api::USAGE_PROMPT_CACHE_MISS, "128000"),
+            (api::USAGE_RESPONSE, "45000"),
+            (api::USAGE_REQUEST, "120"),
         ],
         2 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "2048000"),
-            ("PROMPT_CACHE_MISS_TOKEN", "512000"),
-            ("RESPONSE_TOKEN", "180000"),
-            ("REQUEST", "480"),
+            (api::USAGE_PROMPT_CACHE_HIT, "2048000"),
+            (api::USAGE_PROMPT_CACHE_MISS, "512000"),
+            (api::USAGE_RESPONSE, "180000"),
+            (api::USAGE_REQUEST, "480"),
         ],
         3 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "1024000"),
-            ("PROMPT_CACHE_MISS_TOKEN", "256000"),
-            ("RESPONSE_TOKEN", "90000"),
-            ("REQUEST", "240"),
+            (api::USAGE_PROMPT_CACHE_HIT, "1024000"),
+            (api::USAGE_PROMPT_CACHE_MISS, "256000"),
+            (api::USAGE_RESPONSE, "90000"),
+            (api::USAGE_REQUEST, "240"),
         ],
         4 => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "4096000"),
-            ("PROMPT_CACHE_MISS_TOKEN", "1024000"),
-            ("RESPONSE_TOKEN", "360000"),
-            ("REQUEST", "960"),
+            (api::USAGE_PROMPT_CACHE_HIT, "4096000"),
+            (api::USAGE_PROMPT_CACHE_MISS, "1024000"),
+            (api::USAGE_RESPONSE, "360000"),
+            (api::USAGE_REQUEST, "960"),
         ],
         _ => vec![
             ("PROMPT_TOKEN", "0"),
-            ("PROMPT_CACHE_HIT_TOKEN", "0"),
-            ("PROMPT_CACHE_MISS_TOKEN", "0"),
-            ("RESPONSE_TOKEN", "0"),
-            ("REQUEST", "0"),
+            (api::USAGE_PROMPT_CACHE_HIT, "0"),
+            (api::USAGE_PROMPT_CACHE_MISS, "0"),
+            (api::USAGE_RESPONSE, "0"),
+            (api::USAGE_REQUEST, "0"),
         ],
     }
 }
-
-

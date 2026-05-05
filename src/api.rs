@@ -1,7 +1,15 @@
 use anyhow::Context;
 use serde::Deserialize;
+use std::sync::LazyLock;
 
 const BASE_URL: &str = "https://platform.deepseek.com";
+
+static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+
+pub const USAGE_PROMPT_CACHE_HIT: &str = "PROMPT_CACHE_HIT_TOKEN";
+pub const USAGE_PROMPT_CACHE_MISS: &str = "PROMPT_CACHE_MISS_TOKEN";
+pub const USAGE_RESPONSE: &str = "RESPONSE_TOKEN";
+pub const USAGE_REQUEST: &str = "REQUEST";
 
 #[derive(Debug, Deserialize)]
 pub struct BizResponse<T> {
@@ -95,7 +103,7 @@ pub struct DaySummary {
 
 async fn api_get<T: for<'de> Deserialize<'de>>(token: &str, path: &str) -> anyhow::Result<T> {
     let url = format!("{}{}", BASE_URL, path);
-    let client = reqwest::Client::new();
+    let client = &*CLIENT;
 
     let resp = client
         .get(&url)
@@ -154,11 +162,11 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
 
     for (day_idx, day) in amount.days.iter().enumerate() {
         for (model_idx, model_usage) in day.data.iter().enumerate() {
-            let cache_hit = get_amount(&model_usage.usage, "PROMPT_CACHE_HIT_TOKEN");
-            let cache_miss = get_amount(&model_usage.usage, "PROMPT_CACHE_MISS_TOKEN");
+            let cache_hit = get_amount(&model_usage.usage, USAGE_PROMPT_CACHE_HIT);
+            let cache_miss = get_amount(&model_usage.usage, USAGE_PROMPT_CACHE_MISS);
             let prompt = cache_hit + cache_miss;
-            let response = get_amount(&model_usage.usage, "RESPONSE_TOKEN");
-            let reqs = get_amount(&model_usage.usage, "REQUEST");
+            let response = get_amount(&model_usage.usage, USAGE_RESPONSE);
+            let reqs = get_amount(&model_usage.usage, USAGE_REQUEST);
 
             let cost_val: f64 = if let Some(cd) = cost_data {
                 cd.days
@@ -167,7 +175,7 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
                     .map(|mu| {
                         mu.usage
                             .iter()
-                            .filter(|u| u.usage_type != "REQUEST")
+                            .filter(|u| u.usage_type != USAGE_REQUEST)
                             .map(|u| u.amount.parse::<f64>().unwrap_or(0.0))
                             .sum()
                     })
