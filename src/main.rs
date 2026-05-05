@@ -18,7 +18,8 @@ use std::io::Write;
     version,
     about = "DeepSeek platform usage CLI tool",
     color = clap::ColorChoice::Auto,
-    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check models           List all models used\n  ds-check price            Show model pricing\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
+    disable_help_subcommand = true,
+    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Save platform token\n  ds-check apikey <KEY>     Save API Key for full model list\n  ds-check usage -m 5       Show May usage details\n  ds-check models           List all models used\n  ds-check price            Show model pricing\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
 )]
 struct Cli {
     #[arg(short, long, global = true, help = "Output as JSON")]
@@ -37,15 +38,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    #[command(about = "Save API token (validates and stores user info)")]
+    #[command(about = "Save platform token (validates and stores user info)")]
     Auth {
-        #[arg(help = "DeepSeek API token (leave empty for interactive input)")]
+        #[arg(help = "DeepSeek platform token (leave empty for interactive input)")]
         token: Option<String>,
-        #[arg(
-            long,
-            help = "Optional DeepSeek API Key for api.deepseek.com endpoints"
-        )]
-        api_key: Option<String>,
+    },
+    #[command(about = "Save API Key for api.deepseek.com endpoints")]
+    Apikey {
+        #[arg(help = "DeepSeek API Key")]
+        key: String,
     },
     #[command(about = "Show usage summary (balance, monthly cost, requests)")]
     Summary,
@@ -62,6 +63,8 @@ enum Commands {
     Models,
     #[command(about = "Show model pricing per 1M tokens")]
     Price,
+    #[command(about = "Show help")]
+    Help,
 }
 
 fn get_locale(cli: &Cli) -> Locale {
@@ -95,8 +98,11 @@ async fn main() -> anyhow::Result<()> {
     };
 
     match &cli.command {
-        Some(Commands::Auth { token, api_key }) => {
-            cmd_auth(token, api_key, &locale).await?;
+        Some(Commands::Auth { token }) => {
+            cmd_auth(token, &locale).await?;
+        }
+        Some(Commands::Apikey { key }) => {
+            cmd_apikey(key, &locale)?;
         }
         Some(Commands::Summary) => {
             cmd_summary(cli.json, &locale, render_mode).await?;
@@ -118,9 +124,9 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Price) => {
             cmd_price(cli.json, &locale, render_mode)?;
         }
-        None => {
-            println!("{}", locale.t("use_help"));
-            std::process::exit(1);
+        Some(Commands::Help) | None => {
+            let mut cmd = <Cli as clap::CommandFactory>::command();
+            cmd.print_help()?;
         }
     }
 
@@ -133,11 +139,7 @@ fn cmd_price(json: bool, locale: &Locale, render_mode: RenderMode) -> anyhow::Re
     Ok(())
 }
 
-async fn cmd_auth(
-    token_opt: &Option<String>,
-    api_key_opt: &Option<String>,
-    locale: &Locale,
-) -> anyhow::Result<()> {
+async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result<()> {
     let token = match token_opt {
         Some(t) => t.clone(),
         None => {
@@ -172,7 +174,7 @@ async fn cmd_auth(
         nickname: nickname.clone(),
         email,
         currency,
-        api_key: api_key_opt.clone(),
+        api_key: None,
     };
 
     auth::save(&config)?;
@@ -183,10 +185,17 @@ async fn cmd_auth(
             .t("token_saved")
             .replace("{}", &auth::config_path_str())
     );
-    if api_key_opt.is_some() {
-        println!("{}", locale.t("api_key_saved"));
-    }
 
+    Ok(())
+}
+
+fn cmd_apikey(api_key: &str, locale: &Locale) -> anyhow::Result<()> {
+    let mut config = auth::load()?
+        .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
+    config.api_key = Some(api_key.to_string());
+    auth::save(&config)?;
+    println!("{}", locale.t("api_key_saved"));
+    println!("{}", locale.t("api_key_hint"));
     Ok(())
 }
 

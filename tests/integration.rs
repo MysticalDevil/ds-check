@@ -51,15 +51,9 @@ fn ds_check() -> Command {
 #[test]
 fn test_no_subcommand_exits_with_help() {
     let output = ds_check().output().unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        !output.status.success(),
-        "expected failure, got stdout: {}, stderr: {}",
-        stdout,
-        stderr
-    );
-    assert!(stdout.contains("ds-check --help") || stderr.contains("ds-check --help"));
+    assert!(output.status.success());
+    assert!(stdout.contains("Usage:"));
 }
 
 #[test]
@@ -107,9 +101,9 @@ fn test_models_lists_all_models() {
     let models: Vec<&str> = stdout.lines().collect();
     assert!(models.contains(&"deepseek-v4-pro"));
     assert!(models.contains(&"deepseek-v4-flash"));
-    // Should show api_key hint on stderr when no api_key is configured
+    // Should show apikey hint on stderr when no api_key is configured
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("api-key") || stderr.contains("API Key"));
+    assert!(stderr.contains("apikey") || stderr.contains("API Key"));
 }
 
 #[test]
@@ -124,18 +118,24 @@ fn test_models_with_api_key() {
     cmd.env("XDG_CONFIG_HOME", &temp_config);
     cmd.env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache");
 
-    // First auth with --api-key
-    let auth_output = cmd
-        .arg("auth")
-        .arg("fake-token")
-        .arg("--api-key")
-        .arg("sk-test123")
-        .output()
-        .unwrap();
+    // First auth with token
+    let auth_output = cmd.arg("auth").arg("fake-token").output().unwrap();
     assert!(
         auth_output.status.success(),
         "auth failed: {}",
         String::from_utf8_lossy(&auth_output.stderr)
+    );
+
+    // Then set API Key
+    let mut cmd_apikey = Command::new(env!("CARGO_BIN_EXE_ds-check"));
+    cmd_apikey.env("DSCHECK_MOCK", "1");
+    cmd_apikey.env("XDG_CONFIG_HOME", &temp_config);
+    cmd_apikey.env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache");
+    let apikey_output = cmd_apikey.arg("apikey").arg("sk-test123").output().unwrap();
+    assert!(
+        apikey_output.status.success(),
+        "apikey failed: {}",
+        String::from_utf8_lossy(&apikey_output.stderr)
     );
 
     // Then models should use the API Key route
@@ -148,9 +148,9 @@ fn test_models_with_api_key() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("deepseek-v4-flash"));
     assert!(stdout.contains("deepseek-v4-pro"));
-    // Should NOT show api_key hint when api_key is configured
+    // Should NOT show apikey hint when api_key is configured
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!stderr.contains("api-key"));
+    assert!(!stderr.contains("apikey") && !stderr.contains("API Key"));
 
     let _ = std::fs::remove_dir_all(&temp_config);
 }
