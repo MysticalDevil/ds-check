@@ -36,10 +36,7 @@ pub fn mock_user_summary() -> api::UserSummaryData {
 }
 
 pub fn mock_api_models() -> Vec<String> {
-    vec![
-        "deepseek-v4-flash".into(),
-        "deepseek-v4-pro".into(),
-    ]
+    vec!["deepseek-v4-flash".into(), "deepseek-v4-pro".into()]
 }
 
 pub fn mock_usage_amount() -> api::UsageAmountData {
@@ -118,7 +115,10 @@ fn convert_to_cost(model: &api::ModelUsage) -> api::ModelUsage {
             .iter()
             .map(|u| api::UsageItem {
                 usage_type: u.usage_type.clone(),
-                amount: format!("{:.10}", model_token_cost(&model.model, &u.usage_type, &u.amount)),
+                amount: format!(
+                    "{:.10}",
+                    model_token_cost(&model.model, &u.usage_type, &u.amount)
+                ),
             })
             .collect(),
     }
@@ -243,5 +243,100 @@ fn mock_flash_day_tokens(day: u32) -> Vec<(&'static str, &'static str)> {
             (api::USAGE_RESPONSE, "0"),
             (api::USAGE_REQUEST, "0"),
         ],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mock_usage_total_matches_days() {
+        let amount = mock_usage_amount();
+
+        let pro_hit: u64 =
+            sum_usage_type(&amount.days, "deepseek-v4-pro", api::USAGE_PROMPT_CACHE_HIT);
+        let pro_miss: u64 = sum_usage_type(
+            &amount.days,
+            "deepseek-v4-pro",
+            api::USAGE_PROMPT_CACHE_MISS,
+        );
+        let pro_resp: u64 = sum_usage_type(&amount.days, "deepseek-v4-pro", api::USAGE_RESPONSE);
+        let pro_req: u64 = sum_usage_type(&amount.days, "deepseek-v4-pro", api::USAGE_REQUEST);
+
+        let flash_hit: u64 = sum_usage_type(
+            &amount.days,
+            "deepseek-v4-flash",
+            api::USAGE_PROMPT_CACHE_HIT,
+        );
+        let flash_miss: u64 = sum_usage_type(
+            &amount.days,
+            "deepseek-v4-flash",
+            api::USAGE_PROMPT_CACHE_MISS,
+        );
+        let flash_resp: u64 =
+            sum_usage_type(&amount.days, "deepseek-v4-flash", api::USAGE_RESPONSE);
+        let flash_req: u64 = sum_usage_type(&amount.days, "deepseek-v4-flash", api::USAGE_REQUEST);
+
+        let total_pro = amount
+            .total
+            .iter()
+            .find(|m| m.model == "deepseek-v4-pro")
+            .unwrap();
+        let total_flash = amount
+            .total
+            .iter()
+            .find(|m| m.model == "deepseek-v4-flash")
+            .unwrap();
+
+        let get = |mu: &api::ModelUsage, key: &str| -> u64 {
+            mu.usage
+                .iter()
+                .find(|u| u.usage_type == key)
+                .and_then(|u| u.amount.parse().ok())
+                .unwrap_or(0)
+        };
+
+        assert_eq!(get(total_pro, api::USAGE_PROMPT_CACHE_HIT), pro_hit);
+        assert_eq!(get(total_pro, api::USAGE_PROMPT_CACHE_MISS), pro_miss);
+        assert_eq!(get(total_pro, api::USAGE_RESPONSE), pro_resp);
+        assert_eq!(get(total_pro, api::USAGE_REQUEST), pro_req);
+
+        assert_eq!(get(total_flash, api::USAGE_PROMPT_CACHE_HIT), flash_hit);
+        assert_eq!(get(total_flash, api::USAGE_PROMPT_CACHE_MISS), flash_miss);
+        assert_eq!(get(total_flash, api::USAGE_RESPONSE), flash_resp);
+        assert_eq!(get(total_flash, api::USAGE_REQUEST), flash_req);
+    }
+
+    #[test]
+    fn test_merge_usage_with_mock_data() {
+        let amount = mock_usage_amount();
+        let cost = mock_usage_cost();
+        let days = api::merge_usage(&amount, &cost);
+
+        assert!(!days.is_empty());
+        assert!(days.iter().any(|d| d.model == "deepseek-v4-pro"));
+        assert!(days.iter().any(|d| d.model == "deepseek-v4-flash"));
+
+        let day1_pro = days
+            .iter()
+            .find(|d| d.date.ends_with("-01") && d.model == "deepseek-v4-pro")
+            .unwrap();
+        assert!(day1_pro.cost > 0.0);
+        assert!(day1_pro.requests > 0);
+    }
+
+    #[test]
+    fn test_merge_usage_model_names_not_empty() {
+        let amount = mock_usage_amount();
+        let cost = mock_usage_cost();
+        let days = api::merge_usage(&amount, &cost);
+        for day in &days {
+            assert!(
+                !day.model.is_empty(),
+                "empty model name for date {}",
+                day.date
+            );
+        }
     }
 }

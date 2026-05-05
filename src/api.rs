@@ -4,23 +4,24 @@ use std::sync::LazyLock;
 
 const BASE_URL: &str = "https://platform.deepseek.com";
 const API_BASE_URL: &str = "https://api.deepseek.com";
+const APP_VERSION: &str = "20240425.0";
 
 static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
-#[allow(dead_code)]
-pub const USAGE_PROMPT: &str = "PROMPT_TOKEN";
 pub const USAGE_PROMPT_CACHE_HIT: &str = "PROMPT_CACHE_HIT_TOKEN";
 pub const USAGE_PROMPT_CACHE_MISS: &str = "PROMPT_CACHE_MISS_TOKEN";
 pub const USAGE_RESPONSE: &str = "RESPONSE_TOKEN";
 pub const USAGE_REQUEST: &str = "REQUEST";
 
-#[derive(Debug, Serialize, Deserialize)]
+pub(crate) const USAGE_PROMPT: &str = "PROMPT_TOKEN";
+
+#[derive(Debug, Deserialize)]
 pub struct BizResponse<T> {
     pub code: i32,
     pub data: Option<BizData<T>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct BizData<T> {
     pub biz_code: i32,
@@ -108,6 +109,18 @@ async fn api_get<T>(token: &str, path: &str, locale: &crate::i18n::Locale) -> an
 where
     T: for<'de> Deserialize<'de> + Serialize,
 {
+    api_get_base(token, path, locale, BASE_URL).await
+}
+
+async fn api_get_base<T>(
+    token: &str,
+    path: &str,
+    locale: &crate::i18n::Locale,
+    base_url: &str,
+) -> anyhow::Result<T>
+where
+    T: for<'de> Deserialize<'de> + Serialize,
+{
     // 1. Check cache
     if let Some(cache_path) = crate::cache::cache_path(token, path)
         && let Some(cached) = crate::cache::read_cache::<T>(&cache_path)
@@ -116,12 +129,12 @@ where
     }
 
     // 2. Make HTTP request
-    let url = format!("{}{}", BASE_URL, path);
+    let url = format!("{}{}", base_url, path);
 
     let resp = CLIENT
         .get(&url)
         .header("Authorization", format!("Bearer {}", token))
-        .header("x-app-version", "20240425.0")
+        .header("x-app-version", APP_VERSION)
         .send()
         .await
         .context(locale.t("network_error"))?;
@@ -151,11 +164,17 @@ where
     Ok(result)
 }
 
-pub async fn get_current_user(token: &str, locale: &crate::i18n::Locale) -> anyhow::Result<CurrentUserData> {
+pub async fn get_current_user(
+    token: &str,
+    locale: &crate::i18n::Locale,
+) -> anyhow::Result<CurrentUserData> {
     api_get::<CurrentUserData>(token, "/auth-api/v0/users/current", locale).await
 }
 
-pub async fn get_user_summary(token: &str, locale: &crate::i18n::Locale) -> anyhow::Result<UserSummaryData> {
+pub async fn get_user_summary(
+    token: &str,
+    locale: &crate::i18n::Locale,
+) -> anyhow::Result<UserSummaryData> {
     api_get::<UserSummaryData>(token, "/api/v0/users/get_user_summary", locale).await
 }
 
@@ -199,7 +218,7 @@ pub struct PricingData {
 }
 
 fn pricing_cache_path() -> Option<std::path::PathBuf> {
-    dirs::cache_dir().map(|p| p.join("ds-check").join("pricing.json"))
+    crate::cache::base_dir().map(|p| p.join("pricing.json"))
 }
 
 pub fn load_pricing() -> anyhow::Result<PricingData> {
@@ -225,14 +244,17 @@ pub struct ApiModelList {
     pub data: Vec<ApiModel>,
 }
 
-pub async fn get_models(api_key: &str) -> anyhow::Result<Vec<String>> {
+pub async fn get_models(
+    api_key: &str,
+    locale: &crate::i18n::Locale,
+) -> anyhow::Result<Vec<String>> {
     let resp = CLIENT
         .get(format!("{}/models", API_BASE_URL))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Accept", "application/json")
         .send()
         .await
-        .context("Network error")?;
+        .context(locale.t("network_error"))?;
 
     let list: ApiModelList = resp.json().await.context("Parse response failed")?;
     let models: Vec<String> = list.data.into_iter().map(|m| m.id).collect();
@@ -242,8 +264,6 @@ pub async fn get_models(api_key: &str) -> anyhow::Result<Vec<String>> {
 pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<DaySummary> {
     let cost_data = cost.first();
     let mut result: Vec<DaySummary> = Vec::new();
-
-    let models: Vec<&str> = amount.total.iter().map(|m| m.model.as_str()).collect();
 
     for (day_idx, day) in amount.days.iter().enumerate() {
         for (model_idx, model_usage) in day.data.iter().enumerate() {
@@ -275,10 +295,7 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
 
             result.push(DaySummary {
                 date: day.date.clone(),
-                model: models
-                    .get(model_idx)
-                    .map(|s| s.to_string())
-                    .unwrap_or_default(),
+                model: model_usage.model.clone(),
                 prompt_tokens: prompt,
                 cache_hit_tokens: cache_hit,
                 cache_miss_tokens: cache_miss,
@@ -449,5 +466,162 @@ mod tests {
 
         let result = merge_usage(&amount, &[]);
         assert_eq!(result[0].prompt_tokens, 1200);
+    }
+
+    #[test]
+    fn test_merge_usage_uses_day_model_name() {
+        // Regression: model name comes from day.data[].model, not amount.total[]
+        let amount = UsageAmountData {
+            total: vec![model_usage("wrong-name", vec![])],
+            days: vec![day_usage(
+                "2024-01-01",
+                vec![model_usage(
+                    "correct-name",
+                    vec![item(USAGE_PROMPT_CACHE_HIT, "100")],
+                )],
+            )],
+        };
+
+        let result = merge_usage(&amount, &[]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].model, "correct-name");
+    }
+
+    // ── HTTP mock tests ──────────────────────────────────────
+
+    use crate::i18n::Locale;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn biz_response_json(code: i32, data: Option<serde_json::Value>) -> serde_json::Value {
+        let mut resp = serde_json::json!({"code": code});
+        if let Some(d) = data {
+            resp["data"] = serde_json::json!({
+                "biz_code": 0,
+                "biz_data": d,
+            });
+        }
+        resp
+    }
+
+    #[tokio::test]
+    async fn test_api_get_success() {
+        let server = MockServer::start().await;
+        let user_data = serde_json::json!({
+            "id_profile": {"name": "Test", "email": null},
+            "email": "test@example.com",
+            "currency": "CNY",
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/auth-api/v0/users/current"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(biz_response_json(0, Some(user_data))),
+            )
+            .mount(&server)
+            .await;
+
+        let result = api_get_base::<CurrentUserData>(
+            "fake-token",
+            "/auth-api/v0/users/current",
+            &Locale::EnUS,
+            &server.uri(),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let user = result.unwrap();
+        assert_eq!(user.id_profile.name, "Test");
+        assert_eq!(user.email, "test@example.com");
+    }
+
+    #[tokio::test]
+    async fn test_api_get_code_error() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/v0/test"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(biz_response_json(500, None)))
+            .mount(&server)
+            .await;
+
+        let result = api_get_base::<serde_json::Value>(
+            "fake-token",
+            "/api/v0/test",
+            &Locale::EnUS,
+            &server.uri(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("code=500"));
+    }
+
+    #[tokio::test]
+    async fn test_api_get_auth_expired() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/v0/test"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(biz_response_json(40003, None)))
+            .mount(&server)
+            .await;
+
+        let result = api_get_base::<serde_json::Value>(
+            "fake-token",
+            "/api/v0/test",
+            &Locale::EnUS,
+            &server.uri(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("expired") || err.contains("invalid"));
+    }
+
+    #[tokio::test]
+    async fn test_api_get_empty_data() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/v0/test"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"code": 0})))
+            .mount(&server)
+            .await;
+
+        let result = api_get_base::<serde_json::Value>(
+            "fake-token",
+            "/api/v0/test",
+            &Locale::EnUS,
+            &server.uri(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Empty response"));
+    }
+
+    #[tokio::test]
+    async fn test_api_get_network_error() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/v0/test"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let result = api_get_base::<serde_json::Value>(
+            "fake-token",
+            "/api/v0/test",
+            &Locale::EnUS,
+            &server.uri(),
+        )
+        .await;
+
+        // 500 with no body causes JSON parse failure
+        assert!(result.is_err());
     }
 }

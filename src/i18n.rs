@@ -107,6 +107,8 @@ impl Locale {
                 "network_error" => "網路請求失敗: {}",
                 "config_load_error" => "載入設定檔失敗: {}",
                 "currency_symbol" => "元",
+                "api_key_hint" => "提示: 使用 ds-check auth --api-key <key> 可獲取全量模型列表",
+                "api_key_saved" => "API Key 已儲存",
                 "price_header" => "模型定價",
                 "pricing_not_found" => "找不到定價資料。請先執行: python3 scripts/fetch_pricing.py",
                 "price_model" => "模型",
@@ -142,8 +144,12 @@ impl Locale {
                 "network_error" => "Network request failed: {}",
                 "config_load_error" => "Failed to load config: {}",
                 "currency_symbol" => "CNY",
+                "api_key_hint" => "Tip: Use ds-check auth --api-key <key> to get full model list",
+                "api_key_saved" => "API Key saved",
                 "price_header" => "Model Pricing",
-                "pricing_not_found" => "Pricing data not found. Run: python3 scripts/fetch_pricing.py",
+                "pricing_not_found" => {
+                    "Pricing data not found. Run: python3 scripts/fetch_pricing.py"
+                }
                 "price_model" => "Model",
                 "price_input_cache_hit" => "Input (Cache Hit)",
                 "price_input_cache_miss" => "Input (Cache Miss)",
@@ -179,8 +185,12 @@ impl Locale {
                 "network_error" => "ネットワークエラー: {}",
                 "config_load_error" => "設定の読み込みに失敗: {}",
                 "currency_symbol" => "元",
+                "api_key_hint" => "ヒント: ds-check auth --api-key <key> で全モデルリストを取得",
+                "api_key_saved" => "APIキーを保存しました",
                 "price_header" => "モデル価格",
-                "pricing_not_found" => "価格データが見つかりません。実行してください: python3 scripts/fetch_pricing.py",
+                "pricing_not_found" => {
+                    "価格データが見つかりません。実行してください: python3 scripts/fetch_pricing.py"
+                }
                 "price_model" => "モデル",
                 "price_input_cache_hit" => "入力(キャッシュヒット)",
                 "price_input_cache_miss" => "入力(キャッシュミス)",

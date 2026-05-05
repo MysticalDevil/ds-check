@@ -85,7 +85,7 @@ mod tests {
         unsafe { std::env::set_var("XDG_CONFIG_HOME", &temp_dir) };
 
         // Clean up any existing file
-        let _ = std::fs::remove_dir_all(&temp_dir.join("ds-check"));
+        let _ = std::fs::remove_dir_all(temp_dir.join("ds-check"));
 
         let config = sample_config();
         save(&config).unwrap();

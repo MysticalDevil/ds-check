@@ -115,7 +115,8 @@ fn test_models_lists_all_models() {
 #[test]
 fn test_models_with_api_key() {
     // Use an isolated config directory to avoid parallel test interference
-    let temp_config = std::env::temp_dir().join(format!("ds-check-apikey-test-{}", std::process::id()));
+    let temp_config =
+        std::env::temp_dir().join(format!("ds-check-apikey-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temp_config);
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ds-check"));
@@ -131,7 +132,11 @@ fn test_models_with_api_key() {
         .arg("sk-test123")
         .output()
         .unwrap();
-    assert!(auth_output.status.success(), "auth failed: {}", String::from_utf8_lossy(&auth_output.stderr));
+    assert!(
+        auth_output.status.success(),
+        "auth failed: {}",
+        String::from_utf8_lossy(&auth_output.stderr)
+    );
 
     // Then models should use the API Key route
     let mut cmd2 = Command::new(env!("CARGO_BIN_EXE_ds-check"));
@@ -181,7 +186,8 @@ fn test_usage_model_filter_no_match() {
 #[test]
 fn test_auth_mock_mode() {
     // Use an isolated config directory to avoid overwriting shared auth.json
-    let temp_config = std::env::temp_dir().join(format!("ds-check-auth-test-{}", std::process::id()));
+    let temp_config =
+        std::env::temp_dir().join(format!("ds-check-auth-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temp_config);
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ds-check"));
@@ -255,7 +261,11 @@ fn test_locale_zh_override() {
 #[test]
 fn test_price_shows_models() {
     let output = ds_check().arg("price").output().unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("deepseek-v4-flash"));
     assert!(stdout.contains("deepseek-v4-pro"));

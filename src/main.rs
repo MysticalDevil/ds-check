@@ -41,7 +41,10 @@ enum Commands {
     Auth {
         #[arg(help = "DeepSeek API token (leave empty for interactive input)")]
         token: Option<String>,
-        #[arg(long, help = "Optional DeepSeek API Key for api.deepseek.com endpoints")]
+        #[arg(
+            long,
+            help = "Optional DeepSeek API Key for api.deepseek.com endpoints"
+        )]
         api_key: Option<String>,
     },
     #[command(about = "Show usage summary (balance, monthly cost, requests)")]
@@ -125,13 +128,16 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn cmd_price(json: bool, locale: &Locale, render_mode: RenderMode) -> anyhow::Result<()> {
-    let data = api::load_pricing()
-        .with_context(|| locale.t("pricing_not_found"))?;
+    let data = api::load_pricing().with_context(|| locale.t("pricing_not_found"))?;
     output::print_pricing(&data, json, *locale, render_mode)?;
     Ok(())
 }
 
-async fn cmd_auth(token_opt: &Option<String>, api_key_opt: &Option<String>, locale: &Locale) -> anyhow::Result<()> {
+async fn cmd_auth(
+    token_opt: &Option<String>,
+    api_key_opt: &Option<String>,
+    locale: &Locale,
+) -> anyhow::Result<()> {
     let token = match token_opt {
         Some(t) => t.clone(),
         None => {
@@ -267,7 +273,7 @@ async fn cmd_models(json: bool, locale: &Locale) -> anyhow::Result<()> {
         if is_mock() {
             mock::mock_api_models()
         } else {
-            api::get_models(api_key).await?
+            api::get_models(api_key, locale).await?
         }
     } else {
         // Fallback: derive models from current month usage data
@@ -290,17 +296,7 @@ async fn cmd_models(json: bool, locale: &Locale) -> anyhow::Result<()> {
         m
     };
 
-    if json {
-        let output: Vec<serde_json::Value> = models
-            .iter()
-            .map(|m| serde_json::json!({"model": m}))
-            .collect();
-        println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        for m in models {
-            println!("{}", m);
-        }
-    }
+    output::print_models(&models, json, *locale)?;
 
     if config.api_key.is_none() {
         eprintln!("* {}", locale.t("api_key_hint"));

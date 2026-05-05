@@ -547,9 +547,13 @@ pub fn print_pricing(
         for m in &data.models {
             println!(
                 "{}: {}{} / {}{} / {}{}",
-                m.model, m.input_cache_hit, currency,
-                m.input_cache_miss, currency,
-                m.output, currency,
+                m.model,
+                m.input_cache_hit,
+                currency,
+                m.input_cache_miss,
+                currency,
+                m.output,
+                currency,
             );
         }
         if !data.note.is_empty() {
@@ -648,6 +652,28 @@ fn output_json_pricing(data: &PricingData) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ── Models list ─────────────────────────────────────────────────
+
+pub fn print_models(models: &[String], json: bool, _locale: Locale) -> anyhow::Result<()> {
+    if json {
+        output_json_models(models)?;
+    } else {
+        for m in models {
+            println!("{}", m);
+        }
+    }
+    Ok(())
+}
+
+fn output_json_models(models: &[String]) -> anyhow::Result<()> {
+    let output: Vec<serde_json::Value> = models
+        .iter()
+        .map(|m| serde_json::json!({"model": m}))
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
 // ── Inline render via crossterm ────────────────────────────────
 
 fn render_inline(widget: impl Widget, height: usize, width: usize) -> anyhow::Result<()> {
@@ -692,9 +718,10 @@ fn render_inline(widget: impl Widget, height: usize, width: usize) -> anyhow::Re
         lines.push(runs);
     }
 
-    while lines.last().is_some_and(|runs| {
-        runs.iter().all(|(_, t)| t.trim().is_empty())
-    }) {
+    while lines
+        .last()
+        .is_some_and(|runs| runs.iter().all(|(_, t)| t.trim().is_empty()))
+    {
         lines.pop();
     }
 
