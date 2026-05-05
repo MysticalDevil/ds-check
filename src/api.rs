@@ -160,27 +160,20 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
             let response = get_amount(&model_usage.usage, "RESPONSE_TOKEN");
             let reqs = get_amount(&model_usage.usage, "REQUEST");
 
-            let cost_val: u64 = if let Some(cd) = cost_data {
+            let cost_val: f64 = if let Some(cd) = cost_data {
                 cd.days
                     .get(day_idx)
                     .and_then(|d| d.data.get(model_idx))
                     .map(|mu| {
-                        let c: u64 = mu
-                            .usage
+                        mu.usage
                             .iter()
-                            .map(|u| {
-                                if u.usage_type != "REQUEST" {
-                                    (u.amount.parse::<f64>().unwrap_or(0.0) * 100.0) as u64
-                                } else {
-                                    0
-                                }
-                            })
-                            .sum();
-                        c
+                            .filter(|u| u.usage_type != "REQUEST")
+                            .map(|u| u.amount.parse::<f64>().unwrap_or(0.0))
+                            .sum()
                     })
-                    .unwrap_or(0)
+                    .unwrap_or(0.0)
             } else {
-                0
+                0.0
             };
 
             if prompt == 0 && cache_hit == 0 && cache_miss == 0 && response == 0 && reqs == 0 {
@@ -198,7 +191,7 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
                 cache_miss_tokens: cache_miss,
                 response_tokens: response,
                 requests: reqs,
-                cost: cost_val as f64 / 100.0,
+                cost: cost_val,
             });
         }
     }

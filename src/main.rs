@@ -64,9 +64,6 @@ fn get_locale(cli: &Cli) -> Locale {
     Locale::detect()
 }
 
-fn get_render_mode() -> RenderMode {
-    RenderMode::from_env()
-}
 
 fn is_mock() -> bool {
     std::env::var("DSCHECK_MOCK")
@@ -74,15 +71,12 @@ fn is_mock() -> bool {
         .unwrap_or(false)
 }
 
-fn auth_config_path() -> String {
-    auth::config_path_str()
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let locale = get_locale(&cli);
-    let render_mode = get_render_mode();
+    let render_mode = RenderMode::from_env();
 
     // ASCII mode forces English locale for pure ASCII output
     let locale = if render_mode == output::RenderMode::Ascii {
@@ -159,7 +153,7 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
     println!("{}", locale.t("auth_success").replace("{}", &nickname));
     println!(
         "{}",
-        locale.t("token_saved").replace("{}", &auth_config_path())
+        locale.t("token_saved").replace("{}", &auth::config_path_str())
     );
 
     Ok(())

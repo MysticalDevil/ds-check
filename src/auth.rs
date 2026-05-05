@@ -20,7 +20,7 @@ pub fn load() -> Option<AuthConfig> {
 }
 
 pub fn save(config: &AuthConfig) -> anyhow::Result<()> {
-    let path = config_path().ok_or_else(|| anyhow::anyhow!("无法确定配置目录"))?;
+    let path = config_path().ok_or_else(|| anyhow::anyhow!("Cannot determine config directory"))?;
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
