@@ -5,7 +5,7 @@ edition = "2024"
 description = "CLI tool for checking DeepSeek platform usage and balance"
 license = "MIT"
 repository = "https://github.com/MysticalDevil/ds-check"
-keywords = ["deepseek", "cli", "usage", "api"]
+keywords = ["deepseek", "cli", "balance", "monitoring"]
 categories = ["command-line-utilities"]
 
 [dependencies]
