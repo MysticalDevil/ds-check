@@ -9,6 +9,7 @@ A CLI tool for checking DeepSeek platform usage, balance, and API consumption.
 - View account balance and monthly costs (colorful card UI)
 - Track API request counts and token usage
 - Detailed daily usage breakdown by model and token type
+- Model filtering: list all models, render per-model tables, or substring match
 - Multi-locale support: `zh_CN`, `zh_TW`, `en_US`, `ja_JP`
 - JSON output mode for scripting
 - ASCII / Unicode render modes
@@ -35,10 +36,10 @@ Output (Unicode mode):
 ```
 ┏ DeepSeek Usage ━━━━━━━━━━━━━┓
 ┃                             ┃
-┃   Balance       119.00 CNY  ┃
-┃   Monthly Cost  13.06 CNY   ┃
-┃   API Requests  950         ┃
-┃   Tokens        106.73M     ┃
+┃   Balance       121.76 CNY  ┃
+┃   Monthly Cost  10.30 CNY   ┃
+┃   API Requests  2.58K       ┃
+┃   Tokens        82.56M      ┃
 ┃                             ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
@@ -64,8 +65,15 @@ ds-check usage
 # Specific month
 ds-check usage -m 4 -y 2026
 
-# Filter by model
+# List all models used in the month
+ds-check usage -M list
+
+# Render one table per model
+ds-check usage -M all
+
+# Filter by model (substring match)
 ds-check usage -M v4-pro
+ds-check usage -M flash
 ```
 
 ### Output as JSON
@@ -73,6 +81,7 @@ ds-check usage -M v4-pro
 ```bash
 ds-check summary --json
 ds-check usage --json -m 5
+ds-check usage --json -M flash
 ```
 
 ### Set locale
@@ -86,13 +95,43 @@ Locale auto-detects from `LANG` environment variable when not specified.
 
 Supported locales: `zh_CN`, `zh_TW`, `en_US`, `ja_JP`.
 
+### ASCII render mode
+
+```bash
+# Plain ASCII tables, no Unicode borders or colors
+DSCHECK_RENDER=ascii ds-check summary
+DSCHECK_RENDER=ascii ds-check usage
+```
+
+ASCII mode forces English labels for pure ASCII output.
+
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `DSCHECK_MOCK` | Set to `1` to use mock data (no network calls) |
-| `DSCHECK_RENDER` | Output style: `ascii` or `unicode` (default: `unicode`) |
-| `DSCHECK_LOCALE` | Set default locale, e.g. `zh_CN`, `en_US` |
+| Variable | Values | Description |
+|---|---|---|
+| `DSCHECK_MOCK` | `1` | Use mock data (no network calls) |
+| `DSCHECK_RENDER` | `ascii` / `unicode` | Output style (default: `unicode`) |
+| `DSCHECK_LOCALE` | `zh_CN`, `zh_TW`, `en_US`, `ja_JP` | Set default locale |
+| `LANG` | e.g. `zh_CN.UTF-8` | Auto-detected locale when `--locale` is omitted |
+
+## Development
+
+```bash
+# Check
+cargo check
+
+# Run all tests
+cargo test
+
+# Run only unit tests
+cargo test --lib
+
+# Run only integration tests
+cargo test --test integration
+
+# Build release
+cargo build --release
+```
 
 ## License
 
