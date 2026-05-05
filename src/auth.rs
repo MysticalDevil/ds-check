@@ -13,10 +13,19 @@ fn config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("ds-check").join("auth.json"))
 }
 
-pub fn load() -> Option<AuthConfig> {
-    let path = config_path()?;
-    let data = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&data).ok()
+pub fn load() -> anyhow::Result<Option<AuthConfig>> {
+    let path = match config_path() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    let data = match std::fs::read_to_string(&path) {
+        Ok(d) => d,
+        Err(_) => return Ok(None),
+    };
+    match serde_json::from_str(&data) {
+        Ok(config) => Ok(Some(config)),
+        Err(e) => Err(anyhow::anyhow!("Failed to parse auth config: {}", e)),
+    }
 }
 
 pub fn save(config: &AuthConfig) -> anyhow::Result<()> {
