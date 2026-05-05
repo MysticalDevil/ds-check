@@ -69,6 +69,8 @@ GET https://platform.deepseek.com/auth-api/v0/users/current
 | `biz_data.balance_alert.CNY` | object | CNY 余额预警配置 |
 | `biz_data.balance_alert.CNY.enabled` | boolean | 是否开启预警 |
 | `biz_data.balance_alert.CNY.alert_bound` | string | 预警阈值金额 |
+| `biz_data.identity_verification_id` | string | 个人认证 ID |
+| `biz_data.business_verification_id` | string | 企业认证 ID（可能为 `null`） |
 
 **响应示例**：
 
@@ -86,16 +88,19 @@ GET https://platform.deepseek.com/auth-api/v0/users/current
       "status": 0,
       "id_profile": {
         "provider": "WECHAT",
-        "id": "ef3e400e-...",
-        "picture": "https://static.deepseek.com/...",
+        "id": "ef3e400e-e20c-4f75-84c5-18aefb22d5e5",
+        "picture": "https://static.deepseek.com/user-avatar/0jy3yGoAmkqiZIqajKBtmW1T",
         "name": "可能是菠萝干也可能是萝卜片",
-        "locale": "zh_CN"
+        "locale": "zh_CN",
+        "email": null
       },
       "feature_gates": {
         "PAYMENT": true,
         "ANTOM_ENABLED": true
       },
       "currency": "CNY",
+      "identity_verification_id": "671ba3ba6a324bfa8d6e104b1cb8cf38",
+      "business_verification_id": null,
       "balance_alert": {
         "CNY": { "enabled": true, "alert_bound": "5" },
         "USD": { "enabled": false, "alert_bound": "1" }
@@ -145,13 +150,13 @@ GET https://platform.deepseek.com/api/v0/users/get_user_summary
   "data": {
     "biz_data": {
       "current_token": 10000000,
-      "monthly_usage": "82564945",
+      "monthly_usage": "106725664",
       "total_usage": 0,
       "normal_wallets": [
         {
           "currency": "CNY",
-          "balance": "121.7582374400000000",
-          "token_estimation": "40586079"
+          "balance": "118.9975460400000000",
+          "token_estimation": "39665848"
         }
       ],
       "bonus_wallets": [
@@ -161,14 +166,14 @@ GET https://platform.deepseek.com/api/v0/users/get_user_summary
           "token_estimation": "0"
         }
       ],
-      "total_available_token_estimation": "40586079",
+      "total_available_token_estimation": "39665848",
       "monthly_costs": [
         {
           "currency": "CNY",
-          "amount": "10.3028508000000000"
+          "amount": "13.0635422000000000"
         }
       ],
-      "monthly_token_usage": "82564945"
+      "monthly_token_usage": "106725664"
     }
   }
 }
@@ -197,16 +202,24 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
 
 | type | 说明 |
 |---|---|
-| `PROMPT_TOKEN` | 输入 prompt token（非缓存） |
+| `PROMPT_TOKEN` | 输入 prompt token（**注意**：平台 API 中该值始终返回 `"0"`，已无实际意义） |
 | `PROMPT_CACHE_HIT_TOKEN` | 缓存命中的 prompt token |
 | `PROMPT_CACHE_MISS_TOKEN` | 缓存未命中的 prompt token |
 | `RESPONSE_TOKEN` | 模型输出 token |
 | `REQUEST` | API 请求次数 |
 
+> **输入 Token 计算方式**：由于 `PROMPT_TOKEN` 恒为 0，**实际输入 token 数 = `PROMPT_CACHE_HIT_TOKEN` + `PROMPT_CACHE_MISS_TOKEN`**。消费金额也仅与这两项及 `RESPONSE_TOKEN` 相关。
+
 **响应结构**：
 
 - `biz_data.total` - 该月的汇总数据（按模型）
-- `biz_data.days` - 每日明细数组
+- `biz_data.days` - 每日明细数组，**包含整月的所有日期**（即使当天无用量也会返回，各类型 amount 为 `"0"`）
+
+**当前支持的模型**：
+
+- `deepseek-v4-pro`
+- `deepseek-v4-flash`
+- `deepseek-chat & deepseek-reasoner`
 
 **响应示例（部分）**：
 
@@ -221,19 +234,31 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
           "model": "deepseek-v4-pro",
           "usage": [
             { "type": "PROMPT_TOKEN", "amount": "0" },
-            { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "80389632" },
-            { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "1586256" },
-            { "type": "RESPONSE_TOKEN", "amount": "589057" },
-            { "type": "REQUEST", "amount": "785" }
+            { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "103960448" },
+            { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "2042255" },
+            { "type": "RESPONSE_TOKEN", "amount": "722961" },
+            { "type": "REQUEST", "amount": "950" }
           ]
         },
         {
           "model": "deepseek-v4-flash",
-          "usage": [ ... ]
+          "usage": [
+            { "type": "PROMPT_TOKEN", "amount": "0" },
+            { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
+            { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
+            { "type": "RESPONSE_TOKEN", "amount": "0" },
+            { "type": "REQUEST", "amount": "0" }
+          ]
         },
         {
           "model": "deepseek-chat & deepseek-reasoner",
-          "usage": [ ... ]
+          "usage": [
+            { "type": "PROMPT_TOKEN", "amount": "0" },
+            { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
+            { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
+            { "type": "RESPONSE_TOKEN", "amount": "0" },
+            { "type": "REQUEST", "amount": "0" }
+          ]
         }
       ],
       "days": [
@@ -243,15 +268,36 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
             {
               "model": "deepseek-v4-pro",
               "usage": [
+                { "type": "PROMPT_TOKEN", "amount": "0" },
                 { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "1235072" },
                 { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "259591" },
                 { "type": "RESPONSE_TOKEN", "amount": "33927" },
                 { "type": "REQUEST", "amount": "37" }
               ]
+            },
+            {
+              "model": "deepseek-v4-flash",
+              "usage": [
+                { "type": "PROMPT_TOKEN", "amount": "0" },
+                { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
+                { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
+                { "type": "RESPONSE_TOKEN", "amount": "0" },
+                { "type": "REQUEST", "amount": "0" }
+              ]
+            },
+            {
+              "model": "deepseek-chat & deepseek-reasoner",
+              "usage": [
+                { "type": "PROMPT_TOKEN", "amount": "0" },
+                { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
+                { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
+                { "type": "RESPONSE_TOKEN", "amount": "0" },
+                { "type": "REQUEST", "amount": "0" }
+              ]
             }
           ]
         }
-        // ... 更多日期
+        // ... 后续日期（含用量为 0 的日期）
       ]
     }
   }
@@ -283,9 +329,31 @@ GET https://platform.deepseek.com/api/v0/usage/cost?month={月}&year={年}
           {
             "model": "deepseek-v4-pro",
             "usage": [
-              { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0.0308768000000000" },
-              { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0.7787730000000000" },
-              { "type": "RESPONSE_TOKEN", "amount": "0.2035620000000000" }
+              { "type": "PROMPT_TOKEN", "amount": "0" },
+              { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "2.5990112000000000" },
+              { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "6.1267650000000000" },
+              { "type": "RESPONSE_TOKEN", "amount": "4.3377660000000000" },
+              { "type": "REQUEST", "amount": "0" }
+            ]
+          },
+          {
+            "model": "deepseek-v4-flash",
+            "usage": [
+              { "type": "PROMPT_TOKEN", "amount": "0" },
+              { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
+              { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
+              { "type": "RESPONSE_TOKEN", "amount": "0" },
+              { "type": "REQUEST", "amount": "0" }
+            ]
+          },
+          {
+            "model": "deepseek-chat & deepseek-reasoner",
+            "usage": [
+              { "type": "PROMPT_TOKEN", "amount": "0" },
+              { "type": "PROMPT_CACHE_HIT_TOKEN", "amount": "0" },
+              { "type": "PROMPT_CACHE_MISS_TOKEN", "amount": "0" },
+              { "type": "RESPONSE_TOKEN", "amount": "0" },
+              { "type": "REQUEST", "amount": "0" }
             ]
           }
         ],

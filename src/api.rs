@@ -154,9 +154,9 @@ pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<Da
 
     for (day_idx, day) in amount.days.iter().enumerate() {
         for (model_idx, model_usage) in day.data.iter().enumerate() {
-            let prompt = get_amount(&model_usage.usage, "PROMPT_TOKEN");
             let cache_hit = get_amount(&model_usage.usage, "PROMPT_CACHE_HIT_TOKEN");
             let cache_miss = get_amount(&model_usage.usage, "PROMPT_CACHE_MISS_TOKEN");
+            let prompt = cache_hit + cache_miss;
             let response = get_amount(&model_usage.usage, "RESPONSE_TOKEN");
             let reqs = get_amount(&model_usage.usage, "REQUEST");
 
