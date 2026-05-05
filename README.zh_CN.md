@@ -54,20 +54,24 @@ ds-check auth
 
 Token 和用户信息存储在 `$XDG_CONFIG_HOME/ds-check/auth.json`。
 
+### 列出模型
+
+```bash
+# 当月使用的模型
+ds-check models
+
+# 指定月份的模型
+ds-check models -m 4 -y 2026
+```
+
 ### 查看详细用量
 
 ```bash
-# 当月用量
+# 当月用量（每个模型一张表）
 ds-check usage
 
 # 指定月份
 ds-check usage -m 4 -y 2026
-
-# 列出当月使用的所有模型
-ds-check usage -M list
-
-# 为每个模型单独渲染一张表格
-ds-check usage -M all
 
 # 按模型筛选（子串匹配）
 ds-check usage -M v4-pro
@@ -80,6 +84,7 @@ ds-check usage -M flash
 ds-check summary --json
 ds-check usage --json -m 5
 ds-check usage --json -M flash
+ds-check models --json
 ```
 
 ### 切换语言

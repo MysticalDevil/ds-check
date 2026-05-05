@@ -56,20 +56,24 @@ ds-check auth
 
 Token and user info are stored at `$XDG_CONFIG_HOME/ds-check/auth.json`.
 
+### List models
+
+```bash
+# Models used in current month
+ds-check models
+
+# Models used in a specific month
+ds-check models -m 4 -y 2026
+```
+
 ### View detailed usage
 
 ```bash
-# Current month
+# Current month (one table per model)
 ds-check usage
 
 # Specific month
 ds-check usage -m 4 -y 2026
-
-# List all models used in the month
-ds-check usage -M list
-
-# Render one table per model
-ds-check usage -M all
 
 # Filter by model (substring match)
 ds-check usage -M v4-pro
@@ -82,6 +86,7 @@ ds-check usage -M flash
 ds-check summary --json
 ds-check usage --json -m 5
 ds-check usage --json -M flash
+ds-check models --json
 ```
 
 ### Set locale

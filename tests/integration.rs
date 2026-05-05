@@ -58,13 +58,8 @@ fn test_usage_json_output() {
 }
 
 #[test]
-fn test_usage_model_list() {
-    let output = ds_check()
-        .arg("usage")
-        .arg("--model")
-        .arg("list")
-        .output()
-        .unwrap();
+fn test_models_lists_all_models() {
+    let output = ds_check().arg("models").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     let models: Vec<&str> = stdout.lines().collect();
@@ -84,21 +79,6 @@ fn test_usage_model_filter() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("deepseek-v4-flash"));
     assert!(!stdout.contains("deepseek-v4-pro"));
-}
-
-#[test]
-fn test_usage_model_all() {
-    let output = ds_check()
-        .arg("usage")
-        .arg("--model")
-        .arg("all")
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // Should render one table per model
-    assert!(stdout.contains("deepseek-v4-pro"));
-    assert!(stdout.contains("deepseek-v4-flash"));
 }
 
 #[test]

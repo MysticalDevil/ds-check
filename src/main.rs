@@ -17,7 +17,7 @@ use std::io::Write;
     version,
     about = "DeepSeek platform usage CLI tool",
     color = clap::ColorChoice::Auto,
-    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
+    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Authenticate with token\n  ds-check usage -m 5       Show May usage details\n  ds-check models           List all models used\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
 )]
 struct Cli {
     #[arg(short, long, global = true, help = "Output as JSON")]
@@ -51,6 +51,13 @@ enum Commands {
         year: Option<i32>,
         #[arg(short = 'M', long, help = "Filter by model name")]
         model: Option<String>,
+    },
+    #[command(about = "List all models used in the current month")]
+    Models {
+        #[arg(short, long, help = "Month (1-12, default: current)")]
+        month: Option<u32>,
+        #[arg(short, long, help = "Year (default: current)")]
+        year: Option<i32>,
     },
 }
 
@@ -100,6 +107,9 @@ async fn main() -> anyhow::Result<()> {
                 render_mode,
             )
             .await?;
+        }
+        Some(Commands::Models { month, year }) => {
+            cmd_models(*month, *year, cli.json, &locale).await?;
         }
         None => {
             println!("{}", locale.t("use_help"));
@@ -211,33 +221,65 @@ async fn cmd_usage(
 
     let days = api::merge_usage(&amount, &cost);
 
-    match model {
-        Some("list") => {
-            let mut models: Vec<&str> = days
-                .iter()
-                .map(|d| d.model.as_str())
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-            models.sort();
-            for m in models {
-                println!("{}", m);
-            }
+    if let Some(filter) = model {
+        output::print_usage(&days, Some(filter), json, *locale, render_mode)?;
+    } else {
+        let mut models: Vec<&str> = days
+            .iter()
+            .map(|d| d.model.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        models.sort();
+        if models.is_empty() {
+            println!("{}", locale.t("no_data"));
+            return Ok(());
         }
-        Some("all") => {
-            let mut models: Vec<&str> = days
-                .iter()
-                .map(|d| d.model.as_str())
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-            models.sort();
-            for m in models {
-                output::print_usage(&days, Some(m), json, *locale, render_mode)?;
-            }
+        for m in models {
+            output::print_usage(&days, Some(m), json, *locale, render_mode)?;
         }
-        _ => {
-            output::print_usage(&days, model, json, *locale, render_mode)?;
+    }
+
+    Ok(())
+}
+
+async fn cmd_models(
+    month: Option<u32>,
+    year: Option<i32>,
+    json: bool,
+    locale: &Locale,
+) -> anyhow::Result<()> {
+    let config = auth::load()?
+        .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
+
+    let now = chrono::Local::now();
+    let month = month.unwrap_or(now.month());
+    let year = year.unwrap_or(now.year());
+
+    let amount = if is_mock() {
+        mock::mock_usage_amount()
+    } else {
+        api::get_usage_amount(&config.token, month, year).await?
+    };
+
+    let days = api::merge_usage(&amount, &[]);
+    let mut models: Vec<&str> = days
+        .iter()
+        .map(|d| d.model.as_str())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    models.sort();
+
+    if json {
+        let output: Vec<serde_json::Value> = models
+            .iter()
+            .map(|m| serde_json::json!({"model": m}))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    } else {
+        for m in models {
+            println!("{}", m);
         }
     }
 
