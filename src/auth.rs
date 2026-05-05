@@ -20,7 +20,8 @@ pub fn load() -> anyhow::Result<Option<AuthConfig>> {
     };
     let data = match std::fs::read_to_string(&path) {
         Ok(d) => d,
-        Err(_) => return Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(anyhow::anyhow!("Failed to read {}: {}", path.display(), e)),
     };
     match serde_json::from_str(&data) {
         Ok(config) => Ok(Some(config)),
