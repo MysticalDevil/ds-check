@@ -19,6 +19,7 @@ dirs = "6"
 chrono = "0.4"
 unicode-width = "0.2"
 ratatui = "0.30"
+crossterm = "0.29"
 
 [profile.release]
 strip = true

@@ -5,6 +5,8 @@ use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, BorderType, Cell, Padding, Row, Table, Widget};
+use crossterm::{queue, style::*};
+use std::io::{stdout, Write};
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -56,88 +58,54 @@ impl RenderMode {
     }
 }
 
-// ── ANSI color helpers ─────────────────────────────────────────
+// ── Crossterm color bridge ─────────────────────────────────────
 
-fn style_to_ansi(style: Style) -> String {
-    use ratatui::style::Modifier;
+fn rt_to_ct(c: Color) -> crossterm::style::Color {
+    match c {
+        Color::Reset => crossterm::style::Color::Reset,
+        Color::Black => crossterm::style::Color::Black,
+        Color::Red => crossterm::style::Color::DarkRed,
+        Color::Green => crossterm::style::Color::DarkGreen,
+        Color::Yellow => crossterm::style::Color::DarkYellow,
+        Color::Blue => crossterm::style::Color::DarkBlue,
+        Color::Magenta => crossterm::style::Color::DarkMagenta,
+        Color::Cyan => crossterm::style::Color::DarkCyan,
+        Color::Gray => crossterm::style::Color::Grey,
+        Color::DarkGray => crossterm::style::Color::DarkGrey,
+        Color::LightRed => crossterm::style::Color::Red,
+        Color::LightGreen => crossterm::style::Color::Green,
+        Color::LightYellow => crossterm::style::Color::Yellow,
+        Color::LightBlue => crossterm::style::Color::Blue,
+        Color::LightMagenta => crossterm::style::Color::Magenta,
+        Color::LightCyan => crossterm::style::Color::Cyan,
+        Color::White => crossterm::style::Color::White,
+        Color::Indexed(i) => crossterm::style::Color::AnsiValue(i),
+        Color::Rgb(r, g, b) => crossterm::style::Color::Rgb { r, g, b },
+    }
+}
 
-    let mut parts = Vec::new();
-
-    if style.add_modifier.contains(Modifier::BOLD) {
-        parts.push("1".to_string());
-    }
-    if style.add_modifier.contains(Modifier::DIM) {
-        parts.push("2".to_string());
-    }
-    if style.add_modifier.contains(Modifier::ITALIC) {
-        parts.push("3".to_string());
-    }
-    if style.add_modifier.contains(Modifier::UNDERLINED) {
-        parts.push("4".to_string());
-    }
-    if style.add_modifier.contains(Modifier::REVERSED) {
-        parts.push("7".to_string());
-    }
-
+fn apply_style(stdout: &mut std::io::Stdout, style: Style) {
+    queue!(stdout, ResetColor).unwrap();
     if let Some(fg) = style.fg {
-        parts.push(color_to_ansi_fg(fg));
+        queue!(stdout, SetForegroundColor(rt_to_ct(fg))).unwrap();
     }
     if let Some(bg) = style.bg {
-        parts.push(color_to_ansi_bg(bg));
+        queue!(stdout, SetBackgroundColor(rt_to_ct(bg))).unwrap();
     }
-
-    if parts.is_empty() {
-        String::new()
-    } else {
-        format!("\x1B[{}m", parts.join(";"))
+    if style.add_modifier.contains(Modifier::BOLD) {
+        queue!(stdout, SetAttribute(Attribute::Bold)).unwrap();
     }
-}
-
-fn color_to_ansi_fg(c: Color) -> String {
-    match c {
-        Color::Reset => "39".to_string(),
-        Color::Black => "30".to_string(),
-        Color::Red => "31".to_string(),
-        Color::Green => "32".to_string(),
-        Color::Yellow => "33".to_string(),
-        Color::Blue => "34".to_string(),
-        Color::Magenta => "35".to_string(),
-        Color::Cyan => "36".to_string(),
-        Color::Gray => "37".to_string(),
-        Color::DarkGray => "90".to_string(),
-        Color::LightRed => "91".to_string(),
-        Color::LightGreen => "92".to_string(),
-        Color::LightYellow => "93".to_string(),
-        Color::LightBlue => "94".to_string(),
-        Color::LightMagenta => "95".to_string(),
-        Color::LightCyan => "96".to_string(),
-        Color::White => "97".to_string(),
-        Color::Indexed(i) => format!("38;5;{}", i),
-        Color::Rgb(r, g, b) => format!("38;2;{};{};{}", r, g, b),
+    if style.add_modifier.contains(Modifier::DIM) {
+        queue!(stdout, SetAttribute(Attribute::Dim)).unwrap();
     }
-}
-
-fn color_to_ansi_bg(c: Color) -> String {
-    match c {
-        Color::Reset => "49".to_string(),
-        Color::Black => "40".to_string(),
-        Color::Red => "41".to_string(),
-        Color::Green => "42".to_string(),
-        Color::Yellow => "43".to_string(),
-        Color::Blue => "44".to_string(),
-        Color::Magenta => "45".to_string(),
-        Color::Cyan => "46".to_string(),
-        Color::Gray => "47".to_string(),
-        Color::DarkGray => "100".to_string(),
-        Color::LightRed => "101".to_string(),
-        Color::LightGreen => "102".to_string(),
-        Color::LightYellow => "103".to_string(),
-        Color::LightBlue => "104".to_string(),
-        Color::LightMagenta => "105".to_string(),
-        Color::LightCyan => "106".to_string(),
-        Color::White => "107".to_string(),
-        Color::Indexed(i) => format!("48;5;{}", i),
-        Color::Rgb(r, g, b) => format!("48;2;{};{};{}", r, g, b),
+    if style.add_modifier.contains(Modifier::ITALIC) {
+        queue!(stdout, SetAttribute(Attribute::Italic)).unwrap();
+    }
+    if style.add_modifier.contains(Modifier::UNDERLINED) {
+        queue!(stdout, SetAttribute(Attribute::Underlined)).unwrap();
+    }
+    if style.add_modifier.contains(Modifier::REVERSED) {
+        queue!(stdout, SetAttribute(Attribute::Reverse)).unwrap();
     }
 }
 
@@ -489,19 +457,18 @@ pub fn print_usage(
     render_inline(table, filtered.len() + 6, 86);
 }
 
-// ── Inline render with ANSI colors ─────────────────────────────
+// ── Inline render via crossterm ────────────────────────────────
 
 fn render_inline(widget: impl Widget, height: usize, width: usize) {
     let area = Rect::new(0, 0, width as u16, height as u16);
     let mut buffer = Buffer::empty(area);
     widget.render(area, &mut buffer);
 
-    let mut lines: Vec<String> = Vec::with_capacity(height);
+    // First pass: collect raw text to trim trailing empty lines
+    let mut text_lines: Vec<String> = Vec::with_capacity(height);
     for y in 0..height {
-        let mut line = String::with_capacity(width * 6);
+        let mut line = String::with_capacity(width * 4);
         let mut skip = 0usize;
-        let mut current_style = Style::default();
-
         for x in 0..width {
             if skip > 0 {
                 skip -= 1;
@@ -509,36 +476,44 @@ fn render_inline(widget: impl Widget, height: usize, width: usize) {
             }
             if let Some(cell) = buffer.cell((x as u16, y as u16)) {
                 let sym = cell.symbol();
-                let sym_width = UnicodeWidthStr::width(sym);
-                if sym_width > 1 {
-                    skip = sym_width - 1;
-                }
-
-                let style = cell.style();
-                if style != current_style {
-                    if current_style != Style::default() {
-                        line.push_str("\x1B[0m");
-                    }
-                    if style != Style::default() {
-                        line.push_str(&style_to_ansi(style));
-                    }
-                    current_style = style;
+                if UnicodeWidthStr::width(sym) > 1 {
+                    skip = UnicodeWidthStr::width(sym) - 1;
                 }
                 line.push_str(sym);
             }
         }
-        if current_style != Style::default() {
-            line.push_str("\x1B[0m");
+        text_lines.push(line.trim_end().to_string());
+    }
+    while text_lines.last().is_some_and(|l| l.is_empty()) {
+        text_lines.pop();
+    }
+
+    // Second pass: print with crossterm style commands
+    let mut stdout = stdout();
+    for (y, _) in text_lines.iter().enumerate() {
+        let mut skip = 0usize;
+        let mut current_style = Style::default();
+        for x in 0..width {
+            if skip > 0 {
+                skip -= 1;
+                continue;
+            }
+            if let Some(cell) = buffer.cell((x as u16, y as u16)) {
+                let sym = cell.symbol();
+                if UnicodeWidthStr::width(sym) > 1 {
+                    skip = UnicodeWidthStr::width(sym) - 1;
+                }
+                let style = cell.style();
+                if style != current_style {
+                    apply_style(&mut stdout, style);
+                    current_style = style;
+                }
+                queue!(stdout, Print(sym)).unwrap();
+            }
         }
-        let trimmed = line.trim_end().to_string();
-        lines.push(trimmed);
+        queue!(stdout, ResetColor, Print("\n")).unwrap();
     }
-    while lines.last().is_some_and(|l| l.is_empty()) {
-        lines.pop();
-    }
-    for line in &lines {
-        println!("{}", line);
-    }
+    stdout.flush().unwrap();
 }
 
 fn output_json_summary(summary: &UserSummaryData, requests: u64) {
