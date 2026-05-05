@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
-use ratatui::widgets::{Block, BorderType, Row, Table, Widget};
+use ratatui::widgets::{Block, BorderType, Cell, Row, Table, Widget};
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -84,12 +84,13 @@ pub fn print_summary(
         .map(|v| UnicodeWidthStr::width(v.as_str()))
         .max()
         .unwrap_or(10);
-    let title_w =
-        UnicodeWidthStr::width(format!(" {} ", locale.t("header")).as_str());
+    let title_w = UnicodeWidthStr::width(format!(" {} ", locale.t("header")).as_str());
     let content_w = label_w + value_w + 10;
     let card_w = content_w.max(title_w + 8);
 
     let bold = Style::new().add_modifier(Modifier::BOLD);
+    let gold = render_mode.color(Color::Rgb(0xFF, 0xD7, 0x00));
+    let label_style = Style::new().fg(render_mode.color(Color::Gray));
     let bal_style = bold.fg(render_mode.color(Color::Green));
     let cost_style = bold.fg(render_mode.color(Color::Yellow));
     let req_style = bold.fg(render_mode.color(Color::Cyan));
@@ -97,20 +98,19 @@ pub fn print_summary(
 
     let rows = [
         Row::new([
-            Span::raw(labels[0].clone()),
+            Span::styled(labels[0].clone(), label_style),
             Span::styled(bal_val, bal_style),
         ]),
         Row::new([
-            Span::raw(labels[1].clone()),
+            Span::styled(labels[1].clone(), label_style),
             Span::styled(cost_val, cost_style),
         ]),
         Row::new([
-            Span::raw(labels[2].clone()),
+            Span::styled(labels[2].clone(), label_style),
             Span::styled(req_val, req_style),
         ]),
         Row::new([
-            Span::raw(labels[3].clone()),
-
+            Span::styled(labels[3].clone(), label_style),
             Span::styled(tok_val, tok_style),
         ]),
     ];
@@ -118,7 +118,7 @@ pub fn print_summary(
     let block = Block::bordered()
         .border_type(render_mode.border_type())
         .title(format!(" {} ", locale.t("header")))
-        .title_style(bold)
+        .title_style(bold.fg(gold))
         .border_style(bold.fg(render_mode.color(Color::Cyan)));
 
     let table = Table::new(
@@ -160,8 +160,15 @@ pub fn print_usage(
     }
 
     let bold = Style::new().add_modifier(Modifier::BOLD);
-    let header_style = bold.bg(render_mode.color(Color::Rgb(40, 40, 40)));
-    let total_style = bold.fg(render_mode.color(Color::Yellow));
+    let gold = render_mode.color(Color::Rgb(0xFF, 0xD7, 0x00));
+    let cyan = render_mode.color(Color::Cyan);
+    let yellow = render_mode.color(Color::Yellow);
+    let dim_yellow = Style::new().fg(render_mode.color(Color::Rgb(0xCC, 0xAA, 0x00)));
+    let dim = Style::new().fg(render_mode.color(Color::DarkGray));
+    let header_style = bold.fg(render_mode.color(Color::White)).bg(render_mode.color(Color::Rgb(40, 40, 40)));
+    let total_style = bold.fg(gold);
+    let row_even = Style::new().bg(render_mode.color(Color::Rgb(25, 25, 30)));
+    let row_odd = Style::new();
 
     let headers = [
         locale.t("date"),
@@ -173,9 +180,7 @@ pub fn print_usage(
         locale.t("cost"),
     ];
     let header = Row::new(
-        headers
-            .iter()
-            .map(|h| Span::styled(h.clone(), header_style)),
+        headers.iter().map(|h| Cell::from(Span::styled(h.clone(), header_style))),
     );
 
     let mut total_prompt: u64 = 0;
@@ -187,7 +192,8 @@ pub fn print_usage(
 
     let data_rows: Vec<Row> = filtered
         .iter()
-        .map(|d| {
+        .enumerate()
+        .map(|(i, d)| {
             total_prompt += d.prompt_tokens;
             total_cache_hit += d.cache_hit_tokens;
             total_cache_miss += d.cache_miss_tokens;
@@ -195,26 +201,28 @@ pub fn print_usage(
             total_requests += d.requests;
             total_cost += d.cost;
 
+            let cost_s = format!("{:.2}", d.cost);
             Row::new(vec![
-                d.date.clone(),
-                format_num(d.prompt_tokens),
-                format_num(d.cache_hit_tokens),
-                format_num(d.cache_miss_tokens),
-                format_num(d.response_tokens),
-                format_num(d.requests),
-                format!("{:.2}", d.cost),
+                Cell::from(Span::styled(d.date.clone(), dim)),
+                Cell::from(format_num(d.prompt_tokens)),
+                Cell::from(format_num(d.cache_hit_tokens)),
+                Cell::from(format_num(d.cache_miss_tokens)),
+                Cell::from(format_num(d.response_tokens)),
+                Cell::from(format_num(d.requests)),
+                Cell::from(Span::styled(cost_s, dim_yellow)),
             ])
+            .style(if i % 2 == 0 { row_even } else { row_odd })
         })
         .collect();
 
     let total_row = Row::new(vec![
-        Span::styled(locale.t("total"), total_style),
-        Span::styled(format_num(total_prompt), total_style),
-        Span::styled(format_num(total_cache_hit), total_style),
-        Span::styled(format_num(total_cache_miss), total_style),
-        Span::styled(format_num(total_response), total_style),
-        Span::styled(format_num(total_requests), total_style),
-        Span::styled(format!("{:.2}", total_cost), total_style),
+        Cell::from(Span::styled(locale.t("total"), total_style)),
+        Cell::from(Span::styled(format_num(total_prompt), total_style)),
+        Cell::from(Span::styled(format_num(total_cache_hit), total_style)),
+        Cell::from(Span::styled(format_num(total_cache_miss), total_style)),
+        Cell::from(Span::styled(format_num(total_response), total_style)),
+        Cell::from(Span::styled(format_num(total_requests), total_style)),
+        Cell::from(Span::styled(format!("{:.2}", total_cost), bold.fg(yellow))),
     ]);
 
     let title = if let Some(d) = filtered.first() {
@@ -241,8 +249,8 @@ pub fn print_usage(
         Block::bordered()
             .border_type(render_mode.border_type())
             .title(title)
-            .title_style(bold)
-            .border_style(bold.fg(render_mode.color(Color::Cyan))),
+            .title_style(bold.fg(gold))
+            .border_style(bold.fg(cyan)),
     )
     .column_spacing(1);
 
