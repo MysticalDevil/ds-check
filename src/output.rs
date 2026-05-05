@@ -330,7 +330,7 @@ pub fn print_usage(
             }
         }
 
-        let total_row = vec![
+        let total_row = [
             locale.t("total"),
             format_num(total_prompt),
             format_num(total_cache_hit),
@@ -427,26 +427,11 @@ pub fn print_usage(
             let style = if i % 2 == 0 { row_even } else { row_odd };
             Row::new(vec![
                 Cell::from(Span::styled(d.date.clone(), dim)),
-                Cell::from(Span::styled(
-                    format_num(d.prompt_tokens),
-                    Style::new().fg(render_mode.color(C_WHITE)),
-                )),
-                Cell::from(Span::styled(
-                    format_num(d.cache_hit_tokens),
-                    Style::new().fg(render_mode.color(C_WHITE)),
-                )),
-                Cell::from(Span::styled(
-                    format_num(d.cache_miss_tokens),
-                    Style::new().fg(render_mode.color(C_WHITE)),
-                )),
-                Cell::from(Span::styled(
-                    format_num(d.response_tokens),
-                    Style::new().fg(render_mode.color(C_WHITE)),
-                )),
-                Cell::from(Span::styled(
-                    format_num(d.requests),
-                    Style::new().fg(render_mode.color(C_WHITE)),
-                )),
+                cell_white(format_num(d.prompt_tokens), render_mode),
+                cell_white(format_num(d.cache_hit_tokens), render_mode),
+                cell_white(format_num(d.cache_miss_tokens), render_mode),
+                cell_white(format_num(d.response_tokens), render_mode),
+                cell_white(format_num(d.requests), render_mode),
                 Cell::from(Span::styled(
                     cost_s,
                     Style::new().fg(render_mode.color(C_COST_DIM)),
@@ -529,7 +514,7 @@ fn render_inline(widget: impl Widget, height: usize, width: usize) {
                     skip = sym_width - 1;
                 }
 
-                let style = cell.style().clone();
+                let style = cell.style();
                 if style != current_style {
                     if current_style != Style::default() {
                         line.push_str("\x1B[0m");
@@ -548,7 +533,7 @@ fn render_inline(widget: impl Widget, height: usize, width: usize) {
         let trimmed = line.trim_end().to_string();
         lines.push(trimmed);
     }
-    while lines.last().map_or(false, |l| l.is_empty()) {
+    while lines.last().is_some_and(|l| l.is_empty()) {
         lines.pop();
     }
     for line in &lines {
@@ -604,6 +589,10 @@ fn output_json_usage(days: &[&DaySummary]) {
     if let Ok(s) = serde_json::to_string_pretty(&output) {
         println!("{}", s);
     }
+}
+
+fn cell_white(text: String, render_mode: RenderMode) -> Cell<'static> {
+    Cell::from(Span::styled(text, Style::new().fg(render_mode.color(C_WHITE))))
 }
 
 fn model_matches(actual: &str, filter: &str) -> bool {
