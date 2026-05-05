@@ -139,10 +139,10 @@ where
         .await
         .context(locale.t("network_error"))?;
 
-    let body: serde_json::Value = resp.json().await.context("Parse response failed")?;
+    let body: serde_json::Value = resp.json().await.context(locale.t("parse_failed"))?;
 
     let biz_resp: BizResponse<T> =
-        serde_json::from_value(body).context("Deserialize response failed")?;
+        serde_json::from_value(body).context(locale.t("parse_failed"))?;
 
     if biz_resp.code != 0 {
         if biz_resp.code == 40003 {
@@ -153,7 +153,7 @@ where
 
     let result = biz_resp
         .data
-        .ok_or_else(|| anyhow::anyhow!("Empty response data"))
+        .ok_or_else(|| anyhow::anyhow!("{}", locale.t("empty_data")))
         .map(|d| d.biz_data)?;
 
     // 3. Write cache
@@ -604,7 +604,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_api_get_network_error() {
+    async fn test_api_get_parse_failure_on_empty_body() {
         let server = MockServer::start().await;
 
         Mock::given(method("GET"))

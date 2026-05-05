@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const CACHE_TTL_SECS: u64 = 60;
@@ -10,14 +11,20 @@ struct CacheEntry<T> {
     data: T,
 }
 
+static CACHE_OVERRIDE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 pub fn base_dir() -> Option<PathBuf> {
+    if let Ok(guard) = CACHE_OVERRIDE.lock()
+        && let Some(ref dir) = *guard
+    {
+        return Some(dir.join("ds-check"));
+    }
     dirs::cache_dir().map(|p| p.join("ds-check"))
 }
 
 fn cache_dir() -> Option<PathBuf> {
     base_dir().map(|p| p.join("api_cache"))
 }
-
 fn sha256(input: &str) -> String {
     use sha2::{Digest, Sha256};
     let hash = Sha256::digest(input.as_bytes());
@@ -66,23 +73,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    fn with_temp_cache_dir(f: impl FnOnce(PathBuf)) {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let temp = std::env::temp_dir().join(format!("ds-check-cache-test-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&temp);
-        std::fs::create_dir_all(&temp).unwrap();
-        unsafe { std::env::set_var("XDG_CACHE_HOME", &temp) };
-        f(temp.clone());
-        let _ = std::fs::remove_dir_all(&temp);
+    fn with_cache_override(dir: &std::path::Path, f: impl FnOnce()) {
+        *CACHE_OVERRIDE.lock().unwrap() = Some(dir.to_path_buf());
+        f();
+        *CACHE_OVERRIDE.lock().unwrap() = None;
     }
 
     #[test]
     fn test_roundtrip() {
-        with_temp_cache_dir(|_| {
+        let temp_dir = tempfile::tempdir().unwrap();
+        with_cache_override(temp_dir.path(), || {
             let dir = cache_dir().unwrap();
             let path = dir.join("test.json");
             let data = serde_json::json!({"key": "value", "num": 42});
@@ -95,7 +96,8 @@ mod tests {
 
     #[test]
     fn test_read_missing_file() {
-        with_temp_cache_dir(|_| {
+        let temp_dir = tempfile::tempdir().unwrap();
+        with_cache_override(temp_dir.path(), || {
             let dir = cache_dir().unwrap();
             let path = dir.join("nonexistent.json");
             let result: Option<serde_json::Value> = read_cache(&path);
@@ -105,7 +107,8 @@ mod tests {
 
     #[test]
     fn test_read_corrupted_file() {
-        with_temp_cache_dir(|_| {
+        let temp_dir = tempfile::tempdir().unwrap();
+        with_cache_override(temp_dir.path(), || {
             let dir = cache_dir().unwrap();
             std::fs::create_dir_all(&dir).unwrap();
             let path = dir.join("corrupt.json");
@@ -128,9 +131,10 @@ mod tests {
 
     #[test]
     fn test_base_dir_returns_expected() {
-        with_temp_cache_dir(|temp| {
+        let temp_dir = tempfile::tempdir().unwrap();
+        with_cache_override(temp_dir.path(), || {
             let base = base_dir().unwrap();
-            assert_eq!(base, temp.join("ds-check"));
+            assert_eq!(base, temp_dir.path().join("ds-check"));
         });
     }
 }

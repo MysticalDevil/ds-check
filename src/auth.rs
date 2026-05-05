@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
@@ -11,7 +12,14 @@ pub struct AuthConfig {
     pub api_key: Option<String>,
 }
 
+static CONFIG_OVERRIDE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 fn config_path() -> Option<PathBuf> {
+    if let Ok(guard) = CONFIG_OVERRIDE.lock()
+        && let Some(ref dir) = *guard
+    {
+        return Some(dir.join("ds-check").join("auth.json"));
+    }
     dirs::config_dir().map(|p| p.join("ds-check").join("auth.json"))
 }
 
@@ -52,9 +60,12 @@ pub fn config_path_str() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    fn with_config_override(dir: &std::path::Path, f: impl FnOnce()) {
+        *CONFIG_OVERRIDE.lock().unwrap() = Some(dir.to_path_buf());
+        f();
+        *CONFIG_OVERRIDE.lock().unwrap() = None;
+    }
 
     fn sample_config() -> AuthConfig {
         AuthConfig {
@@ -79,56 +90,39 @@ mod tests {
 
     #[test]
     fn test_save_and_load() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let temp_dir = std::env::temp_dir().join(format!("ds-check-test-{}", std::process::id()));
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", &temp_dir) };
+        let temp_dir = tempfile::tempdir().unwrap();
+        with_config_override(temp_dir.path(), || {
+            let config = sample_config();
+            save(&config).unwrap();
 
-        // Clean up any existing file
-        let _ = std::fs::remove_dir_all(temp_dir.join("ds-check"));
-
-        let config = sample_config();
-        save(&config).unwrap();
-
-        let loaded = load().unwrap();
-        assert!(loaded.is_some());
-        let loaded = loaded.unwrap();
-        assert_eq!(loaded.token, config.token);
-        assert_eq!(loaded.nickname, config.nickname);
-        assert_eq!(loaded.api_key, config.api_key);
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+            let loaded = load().unwrap();
+            assert!(loaded.is_some());
+            let loaded = loaded.unwrap();
+            assert_eq!(loaded.token, config.token);
+            assert_eq!(loaded.nickname, config.nickname);
+            assert_eq!(loaded.api_key, config.api_key);
+        });
     }
 
     #[test]
     fn test_load_missing_file() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let temp_dir =
-            std::env::temp_dir().join(format!("ds-check-test-missing-{}", std::process::id()));
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", &temp_dir) };
-
-        let loaded = load().unwrap();
-        assert!(loaded.is_none());
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        let temp_dir = tempfile::tempdir().unwrap();
+        with_config_override(temp_dir.path(), || {
+            let loaded = load().unwrap();
+            assert!(loaded.is_none());
+        });
     }
 
     #[test]
     fn test_load_corrupted_json() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let temp_dir =
-            std::env::temp_dir().join(format!("ds-check-test-bad-{}", std::process::id()));
-        let config_dir = temp_dir.join("ds-check");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_dir = temp_dir.path().join("ds-check");
         std::fs::create_dir_all(&config_dir).unwrap();
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", &temp_dir) };
-
         std::fs::write(config_dir.join("auth.json"), "not valid json").unwrap();
 
-        let result = load();
-        assert!(result.is_err());
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        with_config_override(temp_dir.path(), || {
+            let result = load();
+            assert!(result.is_err());
+        });
     }
 }
