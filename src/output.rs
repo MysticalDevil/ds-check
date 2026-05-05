@@ -1,11 +1,11 @@
 use crate::api::{DaySummary, UserSummaryData};
 use crate::i18n::Locale;
-use crate::util::dw;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, BorderType, Paragraph, Row, Table, Widget};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Span;
+use ratatui::widgets::{Block, BorderType, Row, Table, Widget};
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum RenderMode {
@@ -45,16 +45,48 @@ pub fn print_summary(
         return;
     }
 
-    let text = build_summary_text(summary, requests, nickname, &locale);
-    let block_title = format!(" {} ", locale.t("header"));
-    let p = Paragraph::new(text).block(
-        Block::bordered()
-            .border_type(render_mode.border_type())
-            .title(block_title)
-            .title_style(Style::new().add_modifier(Modifier::BOLD)),
-    );
+    let balance = summary
+        .normal_wallets
+        .first()
+        .map(|w| (w.balance.clone(), w.currency.clone()))
+        .unwrap_or(("0".into(), "CNY".into()));
+    let cost = summary
+        .monthly_costs
+        .first()
+        .map(|c| (c.amount.clone(), c.currency.clone()))
+        .unwrap_or(("0".into(), "CNY".into()));
+    let tokens = &summary.monthly_token_usage;
 
-    render_widget(p);
+    let bal_str = format!(
+        "{:.2} {}",
+        balance.0.parse::<f64>().unwrap_or(0.0),
+        balance.1
+    );
+    let cost_str = format!("{:.2} {}", cost.0.parse::<f64>().unwrap_or(0.0), cost.1);
+    let req_str = format_num(requests);
+    let tok_str = format_num(tokens.parse().unwrap_or(0));
+
+    let val_style = Style::new().add_modifier(Modifier::BOLD);
+    let rows = [
+        row2(&locale.t("user"), nickname, val_style),
+        row2(&locale.t("balance"), &bal_str, val_style),
+        row2(&locale.t("monthly_cost"), &cost_str, val_style),
+        row2(&locale.t("api_requests"), &req_str, val_style),
+        row2(&locale.t("tokens"), &tok_str, val_style),
+    ];
+
+    let block = Block::bordered()
+        .border_type(render_mode.border_type())
+        .title(format!(" {} ", locale.t("header")))
+        .title_style(Style::new().bold())
+        .border_style(Style::new().fg(Color::Cyan));
+
+    let table = Table::new(rows, [Constraint::Min(14), Constraint::Min(20)])
+        .block(block)
+        .column_spacing(2);
+
+    let rows = 5;
+    render_inline(table, rows + 2);
 }
 
 pub fn print_usage(
@@ -82,135 +114,12 @@ pub fn print_usage(
         return;
     }
 
-    let table = build_usage_table(&filtered, &locale, render_mode);
-    render_widget(table);
-}
+    let header_style = Style::new()
+        .add_modifier(Modifier::BOLD)
+        .bg(Color::DarkGray);
+    let total_style = Style::new().add_modifier(Modifier::BOLD).fg(Color::Yellow);
 
-fn render_widget(widget: impl Widget) {
-    use unicode_width::UnicodeWidthStr;
-
-    let (tw, th) = crossterm::terminal::size().unwrap_or((100, 30));
-    let w = (tw as usize).clamp(40, 200);
-    let h = (th as usize).clamp(4, 80);
-    let area = Rect::new(0, 0, w as u16, h as u16);
-    let mut buffer = Buffer::empty(area);
-    widget.render(area, &mut buffer);
-
-    let mut last_content_y: usize = 0;
-    let mut rows: Vec<String> = Vec::with_capacity(h);
-
-    for y in 0..h {
-        let mut line = String::with_capacity(w + 2);
-        let mut skip_next = 0usize;
-        for x in 0..w {
-            if skip_next > 0 {
-                skip_next -= 1;
-                continue;
-            }
-            let cell = buffer.cell((x as u16, y as u16)).unwrap();
-            let sym = cell.symbol();
-            let sym_width = UnicodeWidthStr::width(sym);
-            if sym_width > 1 {
-                skip_next = sym_width - 1;
-            }
-            line.push_str(sym);
-        }
-        let trimmed_line = line.trim_end().to_string();
-        let significant = trimmed_line.chars().any(|c| {
-            c != ' '
-                && c != '│'
-                && c != '╰'
-                && c != '╯'
-                && c != '╭'
-                && c != '╮'
-                && c != '─'
-                && c != '┌'
-                && c != '┐'
-                && c != '└'
-                && c != '┘'
-                && c != '├'
-                && c != '┤'
-                && c != '┬'
-                && c != '┴'
-                && c != '┼'
-                && c != '+'
-                && c != '-'
-                && c != '|'
-        });
-        if significant {
-            last_content_y = rows.len();
-        }
-        rows.push(trimmed_line);
-    }
-
-    for (i, line) in rows.iter().enumerate() {
-        if i > last_content_y {
-            break;
-        }
-        println!("{}", line);
-    }
-}
-
-fn build_summary_text(
-    summary: &UserSummaryData,
-    requests: u64,
-    nickname: &str,
-    locale: &Locale,
-) -> Text<'static> {
-    let balance = summary
-        .normal_wallets
-        .first()
-        .map(|w| (w.balance.clone(), w.currency.clone()))
-        .unwrap_or(("0".into(), "CNY".into()));
-
-    let cost = summary
-        .monthly_costs
-        .first()
-        .map(|c| (c.amount.clone(), c.currency.clone()))
-        .unwrap_or(("0".into(), "CNY".into()));
-
-    let tokens = summary.monthly_token_usage.clone();
-
-    let labels = [
-        locale.t("user"),
-        locale.t("balance"),
-        locale.t("monthly_cost"),
-        locale.t("api_requests"),
-        locale.t("tokens"),
-    ];
-    let max_w = labels.iter().map(|l| dw(l)).max().unwrap_or(10);
-
-    let bal_str = format!(
-        "{:.2} {}",
-        balance.0.parse::<f64>().unwrap_or(0.0),
-        balance.1
-    );
-    let cost_str = format!("{:.2} {}", cost.0.parse::<f64>().unwrap_or(0.0), cost.1);
-    let req_str = format_num(requests);
-    let tok_str = format_num(tokens.parse().unwrap_or(0));
-
-    let lines: Vec<Line<'static>> = vec![
-        kv_line(&labels[0], nickname, max_w),
-        kv_line(&labels[1], &bal_str, max_w),
-        kv_line(&labels[2], &cost_str, max_w),
-        kv_line(&labels[3], &req_str, max_w),
-        kv_line(&labels[4], &tok_str, max_w),
-    ];
-
-    Text::from(lines)
-}
-
-fn kv_line(label: &str, value: &str, max_w: usize) -> Line<'static> {
-    let padded = pad_end(label, max_w + 2);
-    Line::from(vec![Span::raw(format!(" {}: {}", padded, value))])
-}
-
-fn build_usage_table(
-    days: &[&DaySummary],
-    locale: &Locale,
-    render_mode: RenderMode,
-) -> Table<'static> {
-    let headers: Vec<String> = vec![
+    let headers = [
         locale.t("date"),
         locale.t("prompt_tokens"),
         locale.t("cache_hit_tokens"),
@@ -219,11 +128,10 @@ fn build_usage_table(
         locale.t("requests"),
         locale.t("cost"),
     ];
-
-    let header_row = Row::new(
+    let header = Row::new(
         headers
             .iter()
-            .map(|h| Span::styled(h.clone(), Style::new().add_modifier(Modifier::BOLD))),
+            .map(|h| Span::styled(h.clone(), header_style)),
     );
 
     let mut total_prompt: u64 = 0;
@@ -233,7 +141,7 @@ fn build_usage_table(
     let mut total_requests: u64 = 0;
     let mut total_cost: f64 = 0.0;
 
-    let rows: Vec<Row<'static>> = days
+    let data_rows: Vec<Row> = filtered
         .iter()
         .map(|d| {
             total_prompt += d.prompt_tokens;
@@ -255,33 +163,24 @@ fn build_usage_table(
         })
         .collect();
 
-    let total_label = locale.t("total");
     let total_row = Row::new(vec![
-        total_label,
-        format_num(total_prompt),
-        format_num(total_cache_hit),
-        format_num(total_cache_miss),
-        format_num(total_response),
-        format_num(total_requests),
-        format!("{:.2}", total_cost),
-    ])
-    .style(Style::new().add_modifier(Modifier::BOLD));
+        Span::styled(locale.t("total"), total_style),
+        Span::styled(format_num(total_prompt), total_style),
+        Span::styled(format_num(total_cache_hit), total_style),
+        Span::styled(format_num(total_cache_miss), total_style),
+        Span::styled(format_num(total_response), total_style),
+        Span::styled(format_num(total_requests), total_style),
+        Span::styled(format!("{:.2}", total_cost), total_style),
+    ]);
 
-    let all_rows: Vec<Row<'static>> = {
-        let mut r = vec![header_row];
-        r.extend(rows);
-        r.push(total_row);
-        r
-    };
-
-    let title = if let Some(d) = days.first() {
-        format!(" {} ({}) ", d.model, days.len())
+    let title = if let Some(d) = filtered.first() {
+        format!(" {} ({}) ", d.model, filtered.len())
     } else {
-        format!(" {} ", locale.t("no_data"))
+        locale.t("no_data")
     };
 
-    Table::new(
-        all_rows,
+    let table = Table::new(
+        data_rows,
         [
             Constraint::Min(12),
             Constraint::Min(10),
@@ -292,13 +191,63 @@ fn build_usage_table(
             Constraint::Min(8),
         ],
     )
+    .header(header)
+    .footer(total_row)
     .block(
         Block::bordered()
             .border_type(render_mode.border_type())
             .title(title)
-            .title_style(Style::new().add_modifier(Modifier::BOLD)),
+            .title_style(Style::new().bold())
+            .border_style(Style::new().fg(Color::Cyan)),
     )
-    .column_spacing(1)
+    .column_spacing(1);
+
+    let rows = filtered.len() + 4;
+    render_inline(table, rows.min(30));
+}
+
+fn render_inline(widget: impl Widget, height: usize) {
+    let width = crossterm::terminal::size()
+        .map(|(w, _)| (w as usize).clamp(40, 200))
+        .unwrap_or(100);
+    let area = Rect::new(0, 0, width as u16, height as u16);
+    let mut buffer = Buffer::empty(area);
+    widget.render(area, &mut buffer);
+
+    let mut lines: Vec<String> = Vec::with_capacity(height);
+    for y in 0..height {
+        let mut line = String::with_capacity(width + 4);
+        let mut skip = 0usize;
+        for x in 0..width {
+            if skip > 0 {
+                skip -= 1;
+                continue;
+            }
+            if let Some(cell) = buffer.cell((x as u16, y as u16)) {
+                let sym = cell.symbol();
+                let sym_width = UnicodeWidthStr::width(sym);
+                if sym_width > 1 {
+                    skip = sym_width - 1;
+                }
+                line.push_str(sym);
+            }
+        }
+        let trimmed = line.trim_end().to_string();
+        lines.push(trimmed);
+    }
+    while lines.last().map_or(false, |l| l.is_empty()) {
+        lines.pop();
+    }
+    for line in &lines {
+        println!("{}", line);
+    }
+}
+
+fn row2(label: &str, value: &str, val_style: Style) -> Row<'static> {
+    Row::new([
+        Span::raw(label.to_string()),
+        Span::styled(value.to_string(), val_style),
+    ])
 }
 
 fn output_json_summary(summary: &UserSummaryData, requests: u64, nickname: &str) {
@@ -312,7 +261,6 @@ fn output_json_summary(summary: &UserSummaryData, requests: u64, nickname: &str)
         .first()
         .map(|c| (c.amount.as_str(), c.currency.as_str()))
         .unwrap_or(("0", "CNY"));
-    let tokens = &summary.monthly_token_usage;
 
     let output = serde_json::json!({
         "user": nickname,
@@ -325,9 +273,11 @@ fn output_json_summary(summary: &UserSummaryData, requests: u64, nickname: &str)
             "currency": cost.1,
         },
         "api_requests": requests,
-        "tokens": tokens.parse::<u64>().unwrap_or(0),
+        "tokens": summary.monthly_token_usage.parse::<u64>().unwrap_or(0),
     });
-    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    if let Ok(s) = serde_json::to_string_pretty(&output) {
+        println!("{}", s);
+    }
 }
 
 fn output_json_usage(days: &[&DaySummary]) {
@@ -346,7 +296,9 @@ fn output_json_usage(days: &[&DaySummary]) {
             })
         })
         .collect();
-    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    if let Ok(s) = serde_json::to_string_pretty(&output) {
+        println!("{}", s);
+    }
 }
 
 fn model_matches(actual: &str, filter: &str) -> bool {
@@ -364,14 +316,5 @@ fn format_num(n: u64) -> String {
         format!("{:.2}K", n as f64 / 1_000.0)
     } else {
         n.to_string()
-    }
-}
-
-fn pad_end(s: &str, width: usize) -> String {
-    let cur = dw(s);
-    if cur >= width {
-        s.to_string()
-    } else {
-        format!("{}{}", s, " ".repeat(width - cur))
     }
 }

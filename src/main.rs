@@ -3,7 +3,6 @@ mod auth;
 mod i18n;
 mod mock;
 mod output;
-mod util;
 
 use anyhow::Context;
 use chrono::Datelike;
