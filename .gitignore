@@ -1,4 +1,5 @@
 .env
 pricing.json
 REVIEW.md
+.opencode/
 /target
