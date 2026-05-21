@@ -52,7 +52,6 @@ impl Locale {
                 "invalid_token" => "Token 验证失败，请检查后重试",
                 "auth_expired" => "登录凭证已过期或失效，请重新登录",
                 "token_saved" => "Token 已保存到 {}",
-                "use_help" => "未指定子命令，使用 ds-check --help 查看可用命令",
                 "header" => "DeepSeek 使用量",
                 "balance" => "充值余额",
                 "monthly_cost" => "本月消费",
@@ -91,7 +90,6 @@ impl Locale {
                 "invalid_token" => "Token 驗證失敗，請檢查後重試",
                 "auth_expired" => "登錄憑證已過期或失效，請重新登錄",
                 "token_saved" => "Token 已儲存至 {}",
-                "use_help" => "未指定子命令，使用 ds-check --help 查看可用命令",
                 "header" => "DeepSeek 使用量",
                 "balance" => "儲值餘額",
                 "monthly_cost" => "本月消費",
@@ -130,7 +128,6 @@ impl Locale {
                 "invalid_token" => "Token validation failed, please check and retry",
                 "auth_expired" => "Authentication expired or invalid. Please login again",
                 "token_saved" => "Token saved to {}",
-                "use_help" => "No subcommand specified. Use ds-check --help for available commands",
                 "header" => "DeepSeek Usage",
                 "balance" => "Balance",
                 "monthly_cost" => "Monthly Cost",
@@ -171,9 +168,6 @@ impl Locale {
                 "invalid_token" => "トークンの検証に失敗しました。確認して再試行してください",
                 "auth_expired" => "ログイン情報の有効期限が切れました。再度ログインしてください",
                 "token_saved" => "トークンを {} に保存しました",
-                "use_help" => {
-                    "サブコマンドが指定されていません。ds-check --help で利用可能なコマンドを確認してください"
-                }
                 "header" => "DeepSeek 使用量",
                 "balance" => "残高",
                 "monthly_cost" => "今月の利用料金",

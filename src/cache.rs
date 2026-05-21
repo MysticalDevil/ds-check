@@ -25,6 +25,7 @@ pub fn base_dir() -> Option<PathBuf> {
 fn cache_dir() -> Option<PathBuf> {
     base_dir().map(|p| p.join("api_cache"))
 }
+
 fn sha256(input: &str) -> String {
     use sha2::{Digest, Sha256};
     let hash = Sha256::digest(input.as_bytes());

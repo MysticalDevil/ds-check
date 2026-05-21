@@ -195,7 +195,6 @@ fn cmd_apikey(api_key: &str, locale: &Locale) -> anyhow::Result<()> {
     config.api_key = Some(api_key.to_string());
     auth::save(&config)?;
     println!("{}", locale.t("api_key_saved"));
-    println!("{}", locale.t("api_key_hint"));
     Ok(())
 }
 

@@ -256,7 +256,7 @@ pub async fn get_models(
         .await
         .context(locale.t("network_error"))?;
 
-    let list: ApiModelList = resp.json().await.context("Parse response failed")?;
+    let list: ApiModelList = resp.json().await.context(locale.t("parse_failed"))?;
     let models: Vec<String> = list.data.into_iter().map(|m| m.id).collect();
     Ok(models)
 }
