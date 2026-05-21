@@ -47,21 +47,21 @@ ds-check summary
 ### 登录认证
 
 ```bash
-# 传入平台 Token
+# 保存平台 Token
 ds-check auth sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# 同时保存 API Key（用于 api.deepseek.com 接口）
-ds-check auth sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx --api-key sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # 交互式输入（会显示 Token 获取地址）
 ds-check auth
+
+# 保存 API Key（需先完成 auth）
+ds-check apikey sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Token 和用户信息存储在 `$XDG_CONFIG_HOME/ds-check/auth.json`。
 
 **两种凭证**：
-- **平台 Token**（`<token>`）：来自 `platform.deepseek.com` 的 Bearer Token，用于用量/余额查询。
-- **API Key**（`--api-key`）：来自 `platform.deepseek.com/api_keys`，用于通过 OpenAI 兼容 API 获取全量模型列表。
+- **平台 Token**（`ds-check auth <token>`）：来自 `platform.deepseek.com` 的 Bearer Token，用于用量/余额查询。
+- **API Key**（`ds-check apikey <key>`）：来自 `platform.deepseek.com/api_keys`，用于通过 OpenAI 兼容 API 获取全量模型列表。需先完成 auth。
 
 ### 列出模型
 
@@ -70,7 +70,7 @@ Token 和用户信息存储在 `$XDG_CONFIG_HOME/ds-check/auth.json`。
 ds-check models
 ```
 
-> 配置了 API Key（`ds-check auth <token> --api-key <key>`）时，`models` 自动调用 `api.deepseek.com/models` 获取完整列表。未配置时回退到用量推导模式，并在 stderr 提示用户。
+> 配置了 API Key（`ds-check apikey <key>`）时，`models` 自动调用 `api.deepseek.com/models` 获取完整列表。未配置时回退到用量推导模式，并在 stderr 提示用户。
 
 ### 查看详细用量
 

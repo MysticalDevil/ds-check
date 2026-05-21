@@ -49,21 +49,21 @@ Output (Unicode mode):
 ### Authenticate
 
 ```bash
-# Provide platform token directly
+# Save platform token
 ds-check auth sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Also save an API Key for api.deepseek.com endpoints
-ds-check auth sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx --api-key sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Interactive prompt (shows token URL)
 ds-check auth
+
+# Save API Key for full model list
+ds-check apikey sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Token and user info are stored at `$XDG_CONFIG_HOME/ds-check/auth.json`.
 
 **Two credential types**:
-- **Platform token** (`<token>`): Bearer token from `platform.deepseek.com`, used for usage/balance data.
-- **API Key** (`--api-key`): Key from `platform.deepseek.com/api_keys`, used for full model list via OpenAI-compatible API.
+- **Platform token** (`ds-check auth <token>`): Bearer token from `platform.deepseek.com`, used for usage/balance data.
+- **API Key** (`ds-check apikey <key>`): Key from `platform.deepseek.com/api_keys`, used for full model list via OpenAI-compatible API. Requires an existing token first.
 
 ### List models
 
@@ -72,7 +72,7 @@ Token and user info are stored at `$XDG_CONFIG_HOME/ds-check/auth.json`.
 ds-check models
 ```
 
-> When an API Key is configured (`ds-check auth <token> --api-key <key>`), `models` automatically calls `api.deepseek.com/models` for the complete list. Without an API Key, it falls back to deriving models from usage data and shows a hint on stderr.
+> When an API Key is configured (`ds-check apikey <key>` after auth), `models` automatically calls `api.deepseek.com/models` for the complete list. Without an API Key, it falls back to deriving models from usage data and shows a hint on stderr.
 
 ### View detailed usage
 
