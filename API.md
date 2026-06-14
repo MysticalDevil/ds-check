@@ -1,11 +1,22 @@
-# DeepSeek 开放平台 API 文档
+# metrix Provider API 文档
 
-> 本文档记录 DeepSeek 两类接口：面向开发者的 **API Key** 接口，以及面向平台网页的 **Bearer Token** 内部接口。
+> 本文档记录 metrix 当前使用或预留的厂商接口。DeepSeek 包含面向
+> 开发者的 **API Key** 接口和面向平台网页的 **Bearer Token**
+> 内部接口；Kimi 使用官方公开 API；BigModel 当前仅保存凭据，
+> 财务中心接口待捕获确认。
 > 抓取时间：2026 年 5 月。
+
+## Provider 支持矩阵
+
+| Provider | Base URL / 页面 | 凭据 | 已实现能力 |
+|---|---|---|---|
+| `deepseek` | `https://platform.deepseek.com`, `https://api.deepseek.com` | platform-token + api-key | 概览、月度用量、模型列表、定价 |
+| `kimi` | `https://api.moonshot.cn/v1` | api-key | 余额、模型列表 |
+| `bigmodel` | `https://open.bigmodel.cn/api/paas/v4`, `https://bigmodel.cn/finance-center/finance/overview` | platform-token + api-key | 凭据存储；财务/用量接口实验性预留 |
 
 ---
 
-## 第一部分：API Key 接口（`api.deepseek.com`）
+## 第一部分：DeepSeek API Key 接口（`api.deepseek.com`）
 
 标准的 OpenAI 兼容 API，用于程序调用模型、查询余额等。
 
@@ -26,17 +37,17 @@
 
 ### 1.1 列出模型
 
-```
+```text
 GET https://api.deepseek.com/models
 ```
 
 **用途**：获取当前可用的模型列表（全量）。
 
-**CLI 用法**：`ds-check models` 命令在配置了 API Key 时会自动优先调用此接口：
+**CLI 用法**：`metrix models` 命令在配置了 API Key 时会自动优先调用此接口：
 
 ```bash
-ds-check auth <token> --api-key <your-api-key>
-ds-check models
+metrix auth <token> --api-key <your-api-key>
+metrix models
 ```
 
 **响应示例**:
@@ -61,13 +72,13 @@ ds-check models
 
 > **注意**：此端点仅返回模型 ID 列表，**不包含定价信息**。
 >
-> 如果未配置 API Key，`ds-check models` 会回退到 `platform.deepseek.com` 的用量接口，仅显示当月有数据的部分模型，并在 stderr 提示用户配置 API Key。
+> 如果未配置 API Key，`metrix models` 会回退到 `platform.deepseek.com` 的用量接口，仅显示当月有数据的部分模型，并在 stderr 提示用户配置 API Key。
 
 ---
 
-### 1.2 查询余额
+### 1.2 查询余额（记录，CLI 暂未使用）
 
-```
+```text
 GET https://api.deepseek.com/user/balance
 ```
 
@@ -144,7 +155,7 @@ DeepSeek 开放平台网页后台使用的内部接口，用于展示用量、�
 | `0` | 成功 | — |
 | `40003` | 登录凭证过期或失效 | 重新登录平台，获取新的 Bearer Token |
 
-> `ds-check` 在收到 `40003` 时会提示对应 locale 的友好错误信息（如 *"登录凭证已过期或失效，请重新登录"*）。
+> `metrix` 在收到 `40003` 时会提示对应 locale 的友好错误信息（如 *"登录凭证已过期或失效，请重新登录"*）。
 
 **Token 获取方式**：浏览器登录平台后，可从任意 API 请求头的 `Authorization: Bearer <token>` 中获取。
 
@@ -152,7 +163,7 @@ DeepSeek 开放平台网页后台使用的内部接口，用于展示用量、�
 
 ### 2.1 获取当前用户信息
 
-```
+```text
 GET https://platform.deepseek.com/auth-api/v0/users/current
 ```
 
@@ -220,7 +231,7 @@ GET https://platform.deepseek.com/auth-api/v0/users/current
 
 ### 2.2 获取用户用量摘要
 
-```
+```text
 GET https://platform.deepseek.com/api/v0/users/get_user_summary
 ```
 
@@ -286,7 +297,7 @@ GET https://platform.deepseek.com/api/v0/users/get_user_summary
 
 ### 2.3 Token 用量详情（按天/模型）
 
-```
+```text
 GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
 ```
 
@@ -309,7 +320,10 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
 | `RESPONSE_TOKEN` | 模型输出 token |
 | `REQUEST` | API 请求次数 |
 
-> **输入 Token 计算方式**：由于 `PROMPT_TOKEN` 恒为 0，**实际输入 token 数 = `PROMPT_CACHE_HIT_TOKEN` + `PROMPT_CACHE_MISS_TOKEN`**。消费金额也仅与这两项及 `RESPONSE_TOKEN` 相关。
+> **输入 Token 计算方式**：由于 `PROMPT_TOKEN` 恒为 0，
+> **实际输入 token 数 = `PROMPT_CACHE_HIT_TOKEN` +
+> `PROMPT_CACHE_MISS_TOKEN`**。消费金额也仅与这两项及
+> `RESPONSE_TOKEN` 相关。
 
 **响应结构**：
 
@@ -378,7 +392,7 @@ GET https://platform.deepseek.com/api/v0/usage/amount?month={月}&year={年}
 
 ### 2.4 消费金额详情（按天/模型）
 
-```
+```text
 GET https://platform.deepseek.com/api/v0/usage/cost?month={月}&year={年}
 ```
 
@@ -394,7 +408,7 @@ GET https://platform.deepseek.com/api/v0/usage/cost?month={月}&year={年}
 
 ### 2.5 获取充值/交易记录
 
-```
+```text
 GET https://platform.deepseek.com/auth-api/v0/users/get_all_invoice
 ```
 
@@ -418,7 +432,7 @@ GET https://platform.deepseek.com/auth-api/v0/users/get_all_invoice
 
 ### 2.6 客户端配置
 
-```
+```text
 GET https://platform.deepseek.com/api/v0/client/settings?did={设备ID}
 GET https://platform.deepseek.com/api/v0/client/settings?scope=banner
 ```
@@ -427,13 +441,83 @@ GET https://platform.deepseek.com/api/v0/client/settings?scope=banner
 
 ---
 
-## 第三部分：模型定价
+## 第三部分：Kimi 官方 API
+
+Kimi 开放平台提供 OpenAI 兼容 HTTP API。官方文档：
+
+- API 概览: <https://platform.kimi.com/docs/api/overview>
+- 模型列表: <https://platform.kimi.com/docs/api/list-models>
+- 查询余额: <https://platform.kimi.com/docs/api/balance>
+
+**Base URL**: `https://api.moonshot.cn/v1`
+
+**认证方式**:
+
+| Header | 值 |
+|---|---|
+| `Authorization` | `Bearer <MOONSHOT_API_KEY>` |
+| `Accept` | `application/json` |
+
+### 3.1 列出模型
+
+```http
+GET https://api.moonshot.cn/v1/models
+```
+
+CLI:
+
+```bash
+metrix auth --provider kimi --api-key <key>
+metrix --provider kimi models
+```
+
+### 3.2 查询余额
+
+```http
+GET https://api.moonshot.cn/v1/users/me/balance
+```
+
+响应核心字段：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "available_balance": 49.58894,
+    "voucher_balance": 46.58893,
+    "cash_balance": 3.00001
+  },
+  "scode": "0x0",
+  "status": true
+}
+```
+
+## 第四部分：BigModel / 智谱
+
+官方 API 概览: <https://docs.bigmodel.cn/cn/api/introduction>
+
+**Base URL**: `https://open.bigmodel.cn/api/paas/v4`
+
+**认证方式**:
+
+```http
+Authorization: Bearer <YOUR_API_KEY>
+```
+
+财务中心页面: <https://bigmodel.cn/finance-center/finance/overview>
+
+该页面需要 JavaScript 和登录态。当前版本只保存 BigModel
+`platform-token` 和 `api-key`，不猜测未确认的非公开财务接口。
+等捕获到稳定请求形状后，再启用 BigModel 概览/用量 adapter。
+
+## 第五部分：模型定价
 
 DeepSeek 官方未提供独立的定价 API。定价信息来自官方文档页面的静态 HTML：
-- 中文: https://api-docs.deepseek.com/zh-cn/quick_start/pricing
-- 英文: https://api-docs.deepseek.com/quick_start/pricing
 
-本项目将定价数据内置在 `pricing.json` 中，`ds-check price` 命令直接读取该文件，无需网络请求。
+- 中文: <https://api-docs.deepseek.com/zh-cn/quick_start/pricing>
+- 英文: <https://api-docs.deepseek.com/quick_start/pricing>
+
+本项目将定价数据内置在 `pricing.json` 中，`metrix price` 命令直接读取该文件，无需网络请求。
 
 ### 定价数据格式 (`pricing.json`)
 

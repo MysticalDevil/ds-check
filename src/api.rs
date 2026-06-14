@@ -4,6 +4,7 @@ use std::sync::LazyLock;
 
 const BASE_URL: &str = "https://platform.deepseek.com";
 const API_BASE_URL: &str = "https://api.deepseek.com";
+const KIMI_API_BASE_URL: &str = "https://api.moonshot.cn/v1";
 const APP_VERSION: &str = "20240425.0";
 
 static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
@@ -261,6 +262,96 @@ pub async fn get_models(
     Ok(models)
 }
 
+// ── Kimi API (api.moonshot.cn) ────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KimiBalanceData {
+    pub available_balance: f64,
+    pub voucher_balance: f64,
+    pub cash_balance: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KimiBalanceResponse {
+    pub code: i32,
+    pub data: KimiBalanceData,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KimiModel {
+    pub id: String,
+    pub object: String,
+    pub owned_by: String,
+    #[serde(default)]
+    pub context_length: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KimiModelList {
+    pub object: String,
+    pub data: Vec<KimiModel>,
+}
+
+pub async fn get_kimi_balance(
+    api_key: &str,
+    locale: &crate::i18n::Locale,
+) -> anyhow::Result<KimiBalanceData> {
+    let resp = CLIENT
+        .get(format!("{}/users/me/balance", KIMI_API_BASE_URL))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .context(locale.t("network_error"))?;
+
+    let balance: KimiBalanceResponse = resp.json().await.context(locale.t("parse_failed"))?;
+    if !balance.status || balance.code != 0 {
+        anyhow::bail!("Kimi API error: code={}", balance.code);
+    }
+    Ok(balance.data)
+}
+
+pub async fn get_kimi_models(
+    api_key: &str,
+    locale: &crate::i18n::Locale,
+) -> anyhow::Result<Vec<String>> {
+    let resp = CLIENT
+        .get(format!("{}/models", KIMI_API_BASE_URL))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .context(locale.t("network_error"))?;
+
+    let list: KimiModelList = resp.json().await.context(locale.t("parse_failed"))?;
+    let models: Vec<String> = list.data.into_iter().map(|m| m.id).collect();
+    Ok(models)
+}
+
+pub fn summary_from_kimi_balance(balance: KimiBalanceData) -> UserSummaryData {
+    UserSummaryData {
+        normal_wallets: vec![Wallet {
+            currency: "CNY".into(),
+            balance: balance.available_balance.to_string(),
+            token_estimation: "0".into(),
+        }],
+        bonus_wallets: vec![Wallet {
+            currency: "CNY".into(),
+            balance: balance.voucher_balance.to_string(),
+            token_estimation: "0".into(),
+        }],
+        monthly_costs: vec![MonthlyCost {
+            currency: "CNY".into(),
+            amount: "0".into(),
+        }],
+        monthly_token_usage: "0".into(),
+        current_token: 0,
+        monthly_usage: "0".into(),
+        total_available_token_estimation: "0".into(),
+    }
+}
+
 pub fn merge_usage(amount: &UsageAmountData, cost: &[UsageAmountData]) -> Vec<DaySummary> {
     let cost_data = cost.first();
     let mut result: Vec<DaySummary> = Vec::new();
@@ -485,6 +576,53 @@ mod tests {
         let result = merge_usage(&amount, &[]);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].model, "correct-name");
+    }
+
+    #[test]
+    fn test_parse_kimi_balance_response() {
+        let json = r#"{
+            "code": 0,
+            "data": {
+                "available_balance": 49.58894,
+                "voucher_balance": 46.58893,
+                "cash_balance": 3.00001
+            },
+            "scode": "0x0",
+            "status": true
+        }"#;
+        let resp: KimiBalanceResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.code, 0);
+        assert!((resp.data.available_balance - 49.58894).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_kimi_models_response() {
+        let json = r#"{
+            "object": "list",
+            "data": [
+                {
+                    "id": "kimi-k2.5",
+                    "object": "model",
+                    "created": 123,
+                    "owned_by": "moonshot",
+                    "context_length": 123
+                }
+            ]
+        }"#;
+        let resp: KimiModelList = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.data[0].id, "kimi-k2.5");
+        assert_eq!(resp.data[0].context_length, Some(123));
+    }
+
+    #[test]
+    fn test_kimi_balance_maps_to_summary() {
+        let summary = summary_from_kimi_balance(KimiBalanceData {
+            available_balance: 49.5,
+            voucher_balance: 40.0,
+            cash_balance: 9.5,
+        });
+        assert_eq!(summary.normal_wallets[0].balance, "49.5");
+        assert_eq!(summary.monthly_costs[0].amount, "0");
     }
 
     // ── HTTP mock tests ──────────────────────────────────────

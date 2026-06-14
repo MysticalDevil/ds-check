@@ -39,6 +39,18 @@ pub fn mock_api_models() -> Vec<String> {
     vec!["deepseek-v4-flash".into(), "deepseek-v4-pro".into()]
 }
 
+pub fn mock_kimi_models() -> Vec<String> {
+    vec!["kimi-k2.5".into(), "kimi-k2.7-code".into()]
+}
+
+pub fn mock_kimi_summary() -> api::UserSummaryData {
+    api::summary_from_kimi_balance(api::KimiBalanceData {
+        available_balance: 49.58894,
+        voucher_balance: 46.58893,
+        cash_balance: 3.00001,
+    })
+}
+
 pub fn mock_usage_amount() -> api::UsageAmountData {
     let today = today();
     let days: Vec<api::DayUsage> = (1..=days_in_month())

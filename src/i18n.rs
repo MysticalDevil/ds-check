@@ -45,7 +45,7 @@ impl Locale {
         match self {
             Self::ZhCN => match key {
                 "no_token" => "未检测到登录凭据",
-                "auth_hint" => "请先登录: ds-check auth <你的Token>",
+                "auth_hint" => "请先登录: metrix auth <你的Token>",
                 "enter_token" => "请输入 DeepSeek API Token: ",
                 "token_help" => "Token 获取地址: https://platform.deepseek.com/api_keys",
                 "auth_success" => "登录成功: {}",
@@ -71,7 +71,7 @@ impl Locale {
                 "empty_data" => "响应数据为空",
                 "config_load_error" => "加载配置文件失败: {}",
                 "currency_symbol" => "元",
-                "api_key_hint" => "提示: 使用 ds-check apikey <key> 可获取全量模型列表",
+                "api_key_hint" => "提示: 使用 metrix apikey <key> 可获取全量模型列表",
                 "api_key_saved" => "API Key 已保存",
                 "price_header" => "模型定价",
                 "pricing_not_found" => "未找到定价数据。请先运行: python3 scripts/fetch_pricing.py",
@@ -83,7 +83,7 @@ impl Locale {
             },
             Self::ZhTW => match key {
                 "no_token" => "未檢測到登錄憑據",
-                "auth_hint" => "請先登錄: ds-check auth <你的Token>",
+                "auth_hint" => "請先登錄: metrix auth <你的Token>",
                 "enter_token" => "請輸入 DeepSeek API Token: ",
                 "token_help" => "Token 獲取地址: https://platform.deepseek.com/api_keys",
                 "auth_success" => "登錄成功: {}",
@@ -109,7 +109,7 @@ impl Locale {
                 "empty_data" => "回應資料為空",
                 "config_load_error" => "載入設定檔失敗: {}",
                 "currency_symbol" => "元",
-                "api_key_hint" => "提示: 使用 ds-check apikey <key> 可獲取全量模型列表",
+                "api_key_hint" => "提示: 使用 metrix apikey <key> 可獲取全量模型列表",
                 "api_key_saved" => "API Key 已儲存",
                 "price_header" => "模型定價",
                 "pricing_not_found" => "找不到定價資料。請先執行: python3 scripts/fetch_pricing.py",
@@ -121,7 +121,7 @@ impl Locale {
             },
             Self::EnUS => match key {
                 "no_token" => "No login credentials found",
-                "auth_hint" => "Please login first: ds-check auth <your-token>",
+                "auth_hint" => "Please login first: metrix auth <your-token>",
                 "enter_token" => "Enter your DeepSeek API token: ",
                 "token_help" => "Get your token at: https://platform.deepseek.com/api_keys",
                 "auth_success" => "Logged in as: {}",
@@ -147,7 +147,7 @@ impl Locale {
                 "empty_data" => "Empty response data",
                 "config_load_error" => "Failed to load config: {}",
                 "currency_symbol" => "CNY",
-                "api_key_hint" => "Tip: Use ds-check apikey <key> to get full model list",
+                "api_key_hint" => "Tip: Use metrix apikey <key> to get full model list",
                 "api_key_saved" => "API Key saved",
                 "price_header" => "Model Pricing",
                 "pricing_not_found" => {
@@ -161,7 +161,7 @@ impl Locale {
             },
             Self::JaJP => match key {
                 "no_token" => "ログイン情報が見つかりません",
-                "auth_hint" => "まずログインしてください: ds-check auth <トークン>",
+                "auth_hint" => "まずログインしてください: metrix auth <トークン>",
                 "enter_token" => "DeepSeek API トークンを入力してください: ",
                 "token_help" => "トークンの取得先: https://platform.deepseek.com/api_keys",
                 "auth_success" => "ログイン成功: {}",
@@ -187,7 +187,7 @@ impl Locale {
                 "empty_data" => "応答データが空です",
                 "config_load_error" => "設定の読み込みに失敗: {}",
                 "currency_symbol" => "元",
-                "api_key_hint" => "ヒント: ds-check apikey <key> で全モデルリストを取得",
+                "api_key_hint" => "ヒント: metrix apikey <key> で全モデルリストを取得",
                 "api_key_saved" => "APIキーを保存しました",
                 "price_header" => "モデル価格",
                 "pricing_not_found" => {

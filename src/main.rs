@@ -4,22 +4,24 @@ mod cache;
 mod i18n;
 mod mock;
 mod output;
+mod provider;
 
 use anyhow::Context;
 use chrono::Datelike;
 use clap::{Parser, Subcommand};
 use i18n::Locale;
 use output::RenderMode;
+use provider::ProviderId;
 use std::io::Write;
 
 #[derive(Parser)]
 #[command(
-    name = "ds-check",
+    name = "metrix",
     version,
-    about = "DeepSeek platform usage CLI tool",
+    about = "AI provider usage CLI tool",
     color = clap::ColorChoice::Auto,
     disable_help_subcommand = true,
-    after_help = "Examples:\n  ds-check summary          Show usage summary\n  ds-check auth <TOKEN>     Save platform token\n  ds-check apikey <KEY>     Save API Key for full model list\n  ds-check usage -m 5       Show May usage details\n  ds-check models           List all models used\n  ds-check price            Show model pricing\n  ds-check --json            Output as JSON\n\nEnv vars:\n  DSCHECK_MOCK=1            Use mock data (no network)\n  DSCHECK_RENDER=ascii|unicode  Output style (default: unicode)\n  DSCHECK_LOCALE=zh_CN      Set locale"
+    after_help = "Examples:\n  metrix summary                    Show usage summary\n  metrix auth <TOKEN>               Save DeepSeek platform token\n  metrix auth --provider kimi --api-key <KEY>\n  metrix --provider kimi models     List Kimi models\n  metrix usage -m 5                 Show May usage details\n  metrix price                      Show model pricing\n  metrix --json                     Output as JSON\n\nEnv vars:\n  METRIX_MOCK=1                     Use mock data (no network)\n  METRIX_RENDER=ascii|unicode       Output style (default: unicode)\n  METRIX_LOCALE=zh_CN               Set locale"
 )]
 struct Cli {
     #[arg(short, long, global = true, help = "Output as JSON")]
@@ -32,6 +34,14 @@ struct Cli {
     )]
     locale: Option<String>,
 
+    #[arg(
+        long,
+        global = true,
+        default_value = "deepseek",
+        help = "Set provider (deepseek, kimi, bigmodel)"
+    )]
+    provider: String,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -40,8 +50,12 @@ struct Cli {
 enum Commands {
     #[command(about = "Save platform token (validates and stores user info)")]
     Auth {
-        #[arg(help = "DeepSeek platform token (leave empty for interactive input)")]
+        #[arg(help = "Provider token shorthand")]
         token: Option<String>,
+        #[arg(long, help = "Provider web/platform Bearer token")]
+        platform_token: Option<String>,
+        #[arg(long, help = "Provider public API Key")]
+        api_key: Option<String>,
     },
     #[command(about = "Save API Key for api.deepseek.com endpoints")]
     Apikey {
@@ -71,14 +85,14 @@ fn get_locale(cli: &Cli) -> Locale {
     if let Some(ref l) = cli.locale {
         return Locale::from_str(l);
     }
-    if let Ok(l) = std::env::var("DSCHECK_LOCALE") {
+    if let Ok(l) = std::env::var("METRIX_LOCALE") {
         return Locale::from_str(&l);
     }
     Locale::detect()
 }
 
 fn is_mock() -> bool {
-    std::env::var("DSCHECK_MOCK")
+    std::env::var("METRIX_MOCK")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -88,6 +102,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let locale = get_locale(&cli);
     let render_mode = RenderMode::from_env();
+    let provider = provider::provider_from_cli(&Some(cli.provider.clone()))?;
 
     // ASCII mode forces English locale because manual println tables
     // use fixed-width alignment that breaks with CJK characters
@@ -98,17 +113,22 @@ async fn main() -> anyhow::Result<()> {
     };
 
     match &cli.command {
-        Some(Commands::Auth { token }) => {
-            cmd_auth(token, &locale).await?;
+        Some(Commands::Auth {
+            token,
+            platform_token,
+            api_key,
+        }) => {
+            cmd_auth(provider, token, platform_token, api_key, &locale).await?;
         }
         Some(Commands::Apikey { key }) => {
             cmd_apikey(key, &locale)?;
         }
         Some(Commands::Summary) => {
-            cmd_summary(cli.json, &locale, render_mode).await?;
+            cmd_summary(provider, cli.json, &locale, render_mode).await?;
         }
         Some(Commands::Usage { month, year, model }) => {
             cmd_usage(
+                provider,
                 *month,
                 *year,
                 model.as_deref(),
@@ -119,10 +139,10 @@ async fn main() -> anyhow::Result<()> {
             .await?;
         }
         Some(Commands::Models) => {
-            cmd_models(cli.json, &locale).await?;
+            cmd_models(provider, cli.json, &locale).await?;
         }
         Some(Commands::Price) => {
-            cmd_price(cli.json, &locale, render_mode)?;
+            cmd_price(provider, cli.json, &locale, render_mode)?;
         }
         Some(Commands::Help) | None => {
             let mut cmd = <Cli as clap::CommandFactory>::command();
@@ -133,52 +153,90 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_price(json: bool, locale: &Locale, render_mode: RenderMode) -> anyhow::Result<()> {
+fn cmd_price(
+    provider: ProviderId,
+    json: bool,
+    locale: &Locale,
+    render_mode: RenderMode,
+) -> anyhow::Result<()> {
+    if provider != ProviderId::DeepSeek {
+        return Err(provider::unsupported(provider, "pricing"));
+    }
     let data = api::load_pricing().with_context(|| locale.t("pricing_not_found"))?;
     output::print_pricing(&data, json, *locale, render_mode)?;
     Ok(())
 }
 
-async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result<()> {
-    let token = match token_opt {
-        Some(t) => t.clone(),
-        None => {
-            println!("{}", locale.t("token_help"));
-            print!("{}", locale.t("enter_token"));
-            std::io::stdout().flush()?;
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input)?;
-            input.trim().to_string()
-        }
-    };
+async fn cmd_auth(
+    provider: ProviderId,
+    token_opt: &Option<String>,
+    platform_token_opt: &Option<String>,
+    api_key_opt: &Option<String>,
+    locale: &Locale,
+) -> anyhow::Result<()> {
+    let caps = provider.capabilities();
+    let positional = token_opt.clone();
+    let platform_token = platform_token_opt
+        .clone()
+        .or_else(|| positional.clone().filter(|_| caps.platform_token));
+    let api_key = api_key_opt
+        .clone()
+        .or_else(|| positional.clone().filter(|_| !caps.platform_token));
 
-    if token.is_empty() {
-        anyhow::bail!(locale.t("invalid_token"));
+    if platform_token.is_none() && api_key.is_none() && provider != ProviderId::DeepSeek {
+        anyhow::bail!(
+            "Missing credential. Use --api-key for kimi, or --platform-token/--api-key for bigmodel."
+        );
     }
 
-    let (nickname, email, currency) = if is_mock() {
-        (
-            "MockUser".to_string(),
-            "mock@example.com".to_string(),
-            "CNY".to_string(),
-        )
+    let platform_token = if platform_token.is_none() && api_key.is_none() {
+        match token_opt {
+            Some(t) => Some(t.clone()),
+            None => {
+                println!("{}", locale.t("token_help"));
+                print!("{}", locale.t("enter_token"));
+                std::io::stdout().flush()?;
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+                Some(input.trim().to_string())
+            }
+        }
     } else {
-        let user = api::get_current_user(&token, locale)
-            .await
-            .context(locale.t("invalid_token"))?;
-        (user.id_profile.name, user.email, user.currency)
+        platform_token
     };
 
-    let config = auth::AuthConfig {
-        token,
-        nickname: nickname.clone(),
-        email,
-        currency,
-        api_key: None,
-    };
+    let mut existing = auth::load_provider(provider)?.unwrap_or_default();
 
-    auth::save(&config)?;
-    println!("{}", locale.t("auth_success").replace("{}", &nickname));
+    if let Some(token) = platform_token {
+        if token.is_empty() {
+            anyhow::bail!(locale.t("invalid_token"));
+        }
+        if provider == ProviderId::DeepSeek && !is_mock() {
+            let user = api::get_current_user(&token, locale)
+                .await
+                .context(locale.t("invalid_token"))?;
+            existing.nickname = Some(user.id_profile.name);
+            existing.email = Some(user.email);
+            existing.currency = Some(user.currency);
+        } else if provider == ProviderId::DeepSeek {
+            existing.nickname = Some("MockUser".to_string());
+            existing.email = Some("mock@example.com".to_string());
+            existing.currency = Some("CNY".to_string());
+        }
+        existing.platform_token = Some(token);
+    }
+
+    if let Some(key) = api_key {
+        if key.is_empty() {
+            anyhow::bail!(locale.t("invalid_token"));
+        }
+        existing.api_key = Some(key);
+    }
+
+    auth::save_provider(provider, existing.clone())?;
+
+    let name = existing.nickname.unwrap_or_else(|| provider.to_string());
+    println!("{}", locale.t("auth_success").replace("{}", &name));
     println!(
         "{}",
         locale
@@ -190,41 +248,49 @@ async fn cmd_auth(token_opt: &Option<String>, locale: &Locale) -> anyhow::Result
 }
 
 fn cmd_apikey(api_key: &str, locale: &Locale) -> anyhow::Result<()> {
-    let mut config = auth::load()?
+    let mut auth = auth::load_provider(ProviderId::DeepSeek)?
         .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
-    config.api_key = Some(api_key.to_string());
-    auth::save(&config)?;
+    auth.api_key = Some(api_key.to_string());
+    auth::save_provider(ProviderId::DeepSeek, auth)?;
     println!("{}", locale.t("api_key_saved"));
     Ok(())
 }
 
-async fn cmd_summary(json: bool, locale: &Locale, render_mode: RenderMode) -> anyhow::Result<()> {
-    let config = auth::load()?
+async fn cmd_summary(
+    provider: ProviderId,
+    json: bool,
+    locale: &Locale,
+    render_mode: RenderMode,
+) -> anyhow::Result<()> {
+    let auth = auth::load_provider(provider)?
         .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
-    let (summary, amount) = if is_mock() {
-        (mock::mock_user_summary(), mock::mock_usage_amount())
+    let (summary, total_requests) = if is_mock() {
+        match provider {
+            ProviderId::DeepSeek => {
+                let amount = mock::mock_usage_amount();
+                let total_requests: u64 = amount
+                    .total
+                    .iter()
+                    .flat_map(|m| &m.usage)
+                    .filter(|u| u.usage_type == api::USAGE_REQUEST)
+                    .filter_map(|u| u.amount.parse::<u64>().ok())
+                    .sum();
+                (mock::mock_user_summary(), total_requests)
+            }
+            ProviderId::Kimi => (mock::mock_kimi_summary(), 0),
+            ProviderId::BigModel => return Err(provider::unsupported(provider, "summary")),
+        }
     } else {
-        let now = chrono::Local::now();
-        tokio::try_join!(
-            api::get_user_summary(&config.token, locale),
-            api::get_usage_amount(&config.token, now.month(), now.year(), locale),
-        )?
+        provider::summary(provider, &auth, locale).await?
     };
-
-    let total_requests: u64 = amount
-        .total
-        .iter()
-        .flat_map(|m| &m.usage)
-        .filter(|u| u.usage_type == api::USAGE_REQUEST)
-        .filter_map(|u| u.amount.parse::<u64>().ok())
-        .sum();
 
     output::print_summary(&summary, total_requests, json, *locale, render_mode)?;
     Ok(())
 }
 
 async fn cmd_usage(
+    provider: ProviderId,
     month: Option<u32>,
     year: Option<i32>,
     model: Option<&str>,
@@ -232,23 +298,21 @@ async fn cmd_usage(
     locale: &Locale,
     render_mode: RenderMode,
 ) -> anyhow::Result<()> {
-    let config = auth::load()?
+    let auth = auth::load_provider(provider)?
         .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
     let now = chrono::Local::now();
     let month = month.unwrap_or(now.month());
     let year = year.unwrap_or(now.year());
 
-    let (amount, cost) = if is_mock() {
-        (mock::mock_usage_amount(), mock::mock_usage_cost())
+    let days = if is_mock() {
+        if provider != ProviderId::DeepSeek {
+            return Err(provider::unsupported(provider, "monthly usage"));
+        }
+        api::merge_usage(&mock::mock_usage_amount(), &mock::mock_usage_cost())
     } else {
-        tokio::try_join!(
-            api::get_usage_amount(&config.token, month, year, locale),
-            api::get_usage_cost(&config.token, month, year, locale),
-        )?
+        provider::usage(provider, &auth, month, year, locale).await?
     };
-
-    let days = api::merge_usage(&amount, &cost);
 
     if let Some(filter) = model {
         output::print_usage(&days, Some(filter), json, *locale, render_mode)?;
@@ -272,41 +336,23 @@ async fn cmd_usage(
     Ok(())
 }
 
-async fn cmd_models(json: bool, locale: &Locale) -> anyhow::Result<()> {
-    let config = auth::load()?
+async fn cmd_models(provider: ProviderId, json: bool, locale: &Locale) -> anyhow::Result<()> {
+    let auth = auth::load_provider(provider)?
         .ok_or_else(|| anyhow::anyhow!("{}\n{}", locale.t("no_token"), locale.t("auth_hint")))?;
 
-    // Prefer API Key route for full model list
-    let models: Vec<String> = if let Some(ref api_key) = config.api_key {
-        if is_mock() {
-            mock::mock_api_models()
-        } else {
-            api::get_models(api_key, locale).await?
+    let models: Vec<String> = if is_mock() {
+        match provider {
+            ProviderId::DeepSeek => mock::mock_api_models(),
+            ProviderId::Kimi => mock::mock_kimi_models(),
+            ProviderId::BigModel => return Err(provider::unsupported(provider, "models")),
         }
     } else {
-        // Fallback: derive models from current month usage data
-        let now = chrono::Local::now();
-
-        let amount = if is_mock() {
-            mock::mock_usage_amount()
-        } else {
-            api::get_usage_amount(&config.token, now.month(), now.year(), locale).await?
-        };
-
-        let days = api::merge_usage(&amount, &[]);
-        let mut m: Vec<String> = days
-            .iter()
-            .map(|d| d.model.clone())
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        m.sort();
-        m
+        provider::models(provider, &auth, locale).await?
     };
 
     output::print_models(&models, json, *locale)?;
 
-    if config.api_key.is_none() {
+    if provider == ProviderId::DeepSeek && auth.api_key.is_none() {
         eprintln!("* {}", locale.t("api_key_hint"));
     }
 

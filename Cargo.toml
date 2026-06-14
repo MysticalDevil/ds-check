@@ -1,10 +1,10 @@
 [package]
-name = "ds-check"
+name = "metrix"
 version = "0.1.0"
 edition = "2024"
 description = "CLI tool for checking DeepSeek platform usage and balance"
 license = "MIT"
-repository = "https://github.com/MysticalDevil/ds-check"
+repository = "https://github.com/MysticalDevil/metrix"
 keywords = ["deepseek", "cli", "balance", "monitoring"]
 categories = ["command-line-utilities"]
 

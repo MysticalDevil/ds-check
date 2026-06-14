@@ -17,9 +17,9 @@ pub fn base_dir() -> Option<PathBuf> {
     if let Ok(guard) = CACHE_OVERRIDE.lock()
         && let Some(ref dir) = *guard
     {
-        return Some(dir.join("ds-check"));
+        return Some(dir.join("metrix"));
     }
-    dirs::cache_dir().map(|p| p.join("ds-check"))
+    dirs::cache_dir().map(|p| p.join("metrix"))
 }
 
 fn cache_dir() -> Option<PathBuf> {
@@ -74,8 +74,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{LazyLock, Mutex};
+
+    static TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     fn with_cache_override(dir: &std::path::Path, f: impl FnOnce()) {
+        let _guard = TEST_LOCK.lock().unwrap();
         *CACHE_OVERRIDE.lock().unwrap() = Some(dir.to_path_buf());
         f();
         *CACHE_OVERRIDE.lock().unwrap() = None;
@@ -121,13 +125,16 @@ mod tests {
 
     #[test]
     fn test_cache_path_hash_is_stable() {
-        let path1 = cache_path("token-a", "/api/v0/test");
-        let path2 = cache_path("token-a", "/api/v0/test");
-        assert_eq!(path1, path2);
+        let temp_dir = tempfile::tempdir().unwrap();
+        with_cache_override(temp_dir.path(), || {
+            let path1 = cache_path("token-a", "/api/v0/test");
+            let path2 = cache_path("token-a", "/api/v0/test");
+            assert_eq!(path1, path2);
 
-        // Different tokens produce different paths
-        let path3 = cache_path("token-b", "/api/v0/test");
-        assert_ne!(path1, path3);
+            // Different tokens produce different paths
+            let path3 = cache_path("token-b", "/api/v0/test");
+            assert_ne!(path1, path3);
+        });
     }
 
     #[test]
@@ -135,7 +142,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         with_cache_override(temp_dir.path(), || {
             let base = base_dir().unwrap();
-            assert_eq!(base, temp_dir.path().join("ds-check"));
+            assert_eq!(base, temp_dir.path().join("metrix"));
         });
     }
 }

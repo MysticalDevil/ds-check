@@ -58,7 +58,7 @@ const PRICE_WIDTH: usize = 78;
 
 impl RenderMode {
     pub fn from_env() -> Self {
-        std::env::var("DSCHECK_RENDER")
+        std::env::var("METRIX_RENDER")
             .map(|v| v.to_lowercase())
             .map(|v| match v.as_str() {
                 "ascii" => Self::Ascii,

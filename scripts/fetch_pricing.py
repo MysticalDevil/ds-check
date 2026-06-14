@@ -2,7 +2,7 @@
 """Fetch DeepSeek pricing from official docs and cache it locally.
 
 Usage:
-    python3 scripts/fetch_pricing.py          # Write to $XDG_CACHE_HOME/ds-check/pricing.json
+    python3 scripts/fetch_pricing.py          # Write to $XDG_CACHE_HOME/metrix/pricing.json
     python3 scripts/fetch_pricing.py -o path  # Write to specific path
     python3 scripts/fetch_pricing.py -c       # Check if cached data is up-to-date
 """
@@ -23,7 +23,7 @@ def default_cache_path() -> str:
     cache_home = os.environ.get("XDG_CACHE_HOME")
     if not cache_home:
         cache_home = os.path.expanduser("~/.cache")
-    return os.path.join(cache_home, "ds-check", "pricing.json")
+    return os.path.join(cache_home, "metrix", "pricing.json")
 
 
 class PricingTableParser(HTMLParser):
@@ -145,7 +145,7 @@ def fetch_pricing():
     req = urllib.request.Request(
         URL,
         headers={
-            "User-Agent": "Mozilla/5.0 (compatible; ds-check pricing fetcher)",
+            "User-Agent": "Mozilla/5.0 (compatible; metrix pricing fetcher)",
         },
     )
 
@@ -174,7 +174,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fetch DeepSeek pricing from official docs")
     parser.add_argument(
         "-o", "--output",
-        help="Output file path (default: $XDG_CACHE_HOME/ds-check/pricing.json)",
+        help="Output file path (default: $XDG_CACHE_HOME/metrix/pricing.json)",
     )
     parser.add_argument(
         "-c", "--check",

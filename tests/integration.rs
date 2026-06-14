@@ -5,16 +5,16 @@ static INIT: Once = Once::new();
 
 fn init_test_env() {
     INIT.call_once(|| {
-        let _ = Command::new(env!("CARGO_BIN_EXE_ds-check"))
-            .env("DSCHECK_MOCK", "1")
-            .env("XDG_CONFIG_HOME", "/tmp/ds-check-test-config")
-            .env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache")
+        let _ = Command::new(env!("CARGO_BIN_EXE_metrix"))
+            .env("METRIX_MOCK", "1")
+            .env("XDG_CONFIG_HOME", "/tmp/metrix-test-config")
+            .env("XDG_CACHE_HOME", "/tmp/metrix-test-cache")
             .arg("auth")
             .arg("fake-token")
             .output();
 
         // Write a mock pricing.json into the test cache directory
-        let cache_dir = std::path::PathBuf::from("/tmp/ds-check-test-cache/ds-check");
+        let cache_dir = std::path::PathBuf::from("/tmp/metrix-test-cache/metrix");
         let _ = std::fs::create_dir_all(&cache_dir);
         let pricing_json = r#"{
   "currency": "CNY",
@@ -39,18 +39,18 @@ fn init_test_env() {
     });
 }
 
-fn ds_check() -> Command {
+fn metrix() -> Command {
     init_test_env();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ds-check"));
-    cmd.env("DSCHECK_MOCK", "1");
-    cmd.env("XDG_CONFIG_HOME", "/tmp/ds-check-test-config");
-    cmd.env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    cmd.env("METRIX_MOCK", "1");
+    cmd.env("XDG_CONFIG_HOME", "/tmp/metrix-test-config");
+    cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
     cmd
 }
 
 #[test]
 fn test_no_subcommand_exits_with_help() {
-    let output = ds_check().output().unwrap();
+    let output = metrix().output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success());
     assert!(stdout.contains("Usage:"));
@@ -58,7 +58,7 @@ fn test_no_subcommand_exits_with_help() {
 
 #[test]
 fn test_summary_outputs_balance() {
-    let output = ds_check().arg("summary").output().unwrap();
+    let output = metrix().arg("summary").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("121.76") || stdout.contains("CNY"));
@@ -66,7 +66,7 @@ fn test_summary_outputs_balance() {
 
 #[test]
 fn test_summary_json_output() {
-    let output = ds_check().arg("summary").arg("--json").output().unwrap();
+    let output = metrix().arg("summary").arg("--json").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("\"balance\""));
@@ -75,7 +75,7 @@ fn test_summary_json_output() {
 
 #[test]
 fn test_usage_outputs_table() {
-    let output = ds_check().arg("usage").output().unwrap();
+    let output = metrix().arg("usage").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Title shows first model; table body includes mixed model data
@@ -86,7 +86,7 @@ fn test_usage_outputs_table() {
 
 #[test]
 fn test_usage_json_output() {
-    let output = ds_check().arg("usage").arg("--json").output().unwrap();
+    let output = metrix().arg("usage").arg("--json").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("\"model\""));
@@ -95,7 +95,7 @@ fn test_usage_json_output() {
 
 #[test]
 fn test_models_lists_all_models() {
-    let output = ds_check().arg("models").output().unwrap();
+    let output = metrix().arg("models").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     let models: Vec<&str> = stdout.lines().collect();
@@ -110,13 +110,13 @@ fn test_models_lists_all_models() {
 fn test_models_with_api_key() {
     // Use an isolated config directory to avoid parallel test interference
     let temp_config =
-        std::env::temp_dir().join(format!("ds-check-apikey-test-{}", std::process::id()));
+        std::env::temp_dir().join(format!("metrix-apikey-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temp_config);
 
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ds-check"));
-    cmd.env("DSCHECK_MOCK", "1");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    cmd.env("METRIX_MOCK", "1");
     cmd.env("XDG_CONFIG_HOME", &temp_config);
-    cmd.env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache");
+    cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
 
     // First auth with token
     let auth_output = cmd.arg("auth").arg("fake-token").output().unwrap();
@@ -127,10 +127,10 @@ fn test_models_with_api_key() {
     );
 
     // Then set API Key
-    let mut cmd_apikey = Command::new(env!("CARGO_BIN_EXE_ds-check"));
-    cmd_apikey.env("DSCHECK_MOCK", "1");
+    let mut cmd_apikey = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    cmd_apikey.env("METRIX_MOCK", "1");
     cmd_apikey.env("XDG_CONFIG_HOME", &temp_config);
-    cmd_apikey.env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache");
+    cmd_apikey.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
     let apikey_output = cmd_apikey.arg("apikey").arg("sk-test123").output().unwrap();
     assert!(
         apikey_output.status.success(),
@@ -139,10 +139,10 @@ fn test_models_with_api_key() {
     );
 
     // Then models should use the API Key route
-    let mut cmd2 = Command::new(env!("CARGO_BIN_EXE_ds-check"));
-    cmd2.env("DSCHECK_MOCK", "1");
+    let mut cmd2 = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    cmd2.env("METRIX_MOCK", "1");
     cmd2.env("XDG_CONFIG_HOME", &temp_config);
-    cmd2.env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache");
+    cmd2.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
     let output = cmd2.arg("models").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -156,8 +156,107 @@ fn test_models_with_api_key() {
 }
 
 #[test]
+fn test_kimi_summary_and_models_mock_mode() {
+    let temp_config = std::env::temp_dir().join(format!("metrix-kimi-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_config);
+
+    let mut auth_cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    auth_cmd.env("METRIX_MOCK", "1");
+    auth_cmd.env("XDG_CONFIG_HOME", &temp_config);
+    auth_cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
+    let auth_output = auth_cmd
+        .arg("--provider")
+        .arg("kimi")
+        .arg("auth")
+        .arg("--api-key")
+        .arg("sk-kimi-test")
+        .output()
+        .unwrap();
+    assert!(
+        auth_output.status.success(),
+        "kimi auth failed: {}",
+        String::from_utf8_lossy(&auth_output.stderr)
+    );
+
+    let mut summary_cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    summary_cmd.env("METRIX_MOCK", "1");
+    summary_cmd.env("XDG_CONFIG_HOME", &temp_config);
+    summary_cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
+    let summary = summary_cmd
+        .arg("--provider")
+        .arg("kimi")
+        .arg("summary")
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(summary.status.success());
+    let stdout = String::from_utf8_lossy(&summary.stdout);
+    assert!(stdout.contains("49.58894"));
+
+    let mut models_cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    models_cmd.env("METRIX_MOCK", "1");
+    models_cmd.env("XDG_CONFIG_HOME", &temp_config);
+    models_cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
+    let models = models_cmd
+        .arg("--provider")
+        .arg("kimi")
+        .arg("models")
+        .output()
+        .unwrap();
+    assert!(models.status.success());
+    let stdout = String::from_utf8_lossy(&models.stdout);
+    assert!(stdout.contains("kimi-k2.5"));
+
+    let _ = std::fs::remove_dir_all(&temp_config);
+}
+
+#[test]
+fn test_bigmodel_summary_is_explicitly_unsupported() {
+    let temp_config =
+        std::env::temp_dir().join(format!("metrix-bigmodel-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_config);
+
+    let mut auth_cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    auth_cmd.env("METRIX_MOCK", "1");
+    auth_cmd.env("XDG_CONFIG_HOME", &temp_config);
+    auth_cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
+    let auth_output = auth_cmd
+        .arg("--provider")
+        .arg("bigmodel")
+        .arg("auth")
+        .arg("--platform-token")
+        .arg("web-token")
+        .arg("--api-key")
+        .arg("api-key")
+        .output()
+        .unwrap();
+    assert!(
+        auth_output.status.success(),
+        "bigmodel auth failed: {}",
+        String::from_utf8_lossy(&auth_output.stderr)
+    );
+
+    let mut summary_cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    summary_cmd.env("METRIX_MOCK", "1");
+    summary_cmd.env("XDG_CONFIG_HOME", &temp_config);
+    summary_cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
+    let summary = summary_cmd
+        .arg("--provider")
+        .arg("bigmodel")
+        .arg("summary")
+        .output()
+        .unwrap();
+    assert!(!summary.status.success());
+    let stderr = String::from_utf8_lossy(&summary.stderr);
+    assert!(stderr.contains("bigmodel"));
+    assert!(stderr.contains("summary"));
+
+    let _ = std::fs::remove_dir_all(&temp_config);
+}
+
+#[test]
 fn test_usage_model_filter() {
-    let output = ds_check()
+    let output = metrix()
         .arg("usage")
         .arg("--model")
         .arg("flash")
@@ -171,7 +270,7 @@ fn test_usage_model_filter() {
 
 #[test]
 fn test_usage_model_filter_no_match() {
-    let output = ds_check()
+    let output = metrix()
         .arg("usage")
         .arg("--model")
         .arg("nonexistent-model-xyz")
@@ -186,14 +285,13 @@ fn test_usage_model_filter_no_match() {
 #[test]
 fn test_auth_mock_mode() {
     // Use an isolated config directory to avoid overwriting shared auth.json
-    let temp_config =
-        std::env::temp_dir().join(format!("ds-check-auth-test-{}", std::process::id()));
+    let temp_config = std::env::temp_dir().join(format!("metrix-auth-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temp_config);
 
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ds-check"));
-    cmd.env("DSCHECK_MOCK", "1");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_metrix"));
+    cmd.env("METRIX_MOCK", "1");
     cmd.env("XDG_CONFIG_HOME", &temp_config);
-    cmd.env("XDG_CACHE_HOME", "/tmp/ds-check-test-cache");
+    cmd.env("XDG_CACHE_HOME", "/tmp/metrix-test-cache");
 
     let output = cmd.arg("auth").arg("fake-token").output().unwrap();
     assert!(output.status.success());
@@ -205,8 +303,8 @@ fn test_auth_mock_mode() {
 
 #[test]
 fn test_ascii_render_summary() {
-    let output = ds_check()
-        .env("DSCHECK_RENDER", "ascii")
+    let output = metrix()
+        .env("METRIX_RENDER", "ascii")
         .arg("summary")
         .output()
         .unwrap();
@@ -218,8 +316,8 @@ fn test_ascii_render_summary() {
 
 #[test]
 fn test_ascii_render_usage() {
-    let output = ds_check()
-        .env("DSCHECK_RENDER", "ascii")
+    let output = metrix()
+        .env("METRIX_RENDER", "ascii")
         .arg("usage")
         .output()
         .unwrap();
@@ -232,7 +330,7 @@ fn test_ascii_render_usage() {
 
 #[test]
 fn test_locale_en_override() {
-    let output = ds_check()
+    let output = metrix()
         .arg("summary")
         .arg("--locale")
         .arg("en_US")
@@ -246,7 +344,7 @@ fn test_locale_en_override() {
 
 #[test]
 fn test_locale_zh_override() {
-    let output = ds_check()
+    let output = metrix()
         .arg("summary")
         .arg("--locale")
         .arg("zh_CN")
@@ -260,7 +358,7 @@ fn test_locale_zh_override() {
 
 #[test]
 fn test_price_shows_models() {
-    let output = ds_check().arg("price").output().unwrap();
+    let output = metrix().arg("price").output().unwrap();
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -274,7 +372,7 @@ fn test_price_shows_models() {
 
 #[test]
 fn test_price_json_output() {
-    let output = ds_check().arg("price").arg("--json").output().unwrap();
+    let output = metrix().arg("price").arg("--json").output().unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("\"currency\""));
@@ -284,8 +382,8 @@ fn test_price_json_output() {
 
 #[test]
 fn test_price_ascii_render() {
-    let output = ds_check()
-        .env("DSCHECK_RENDER", "ascii")
+    let output = metrix()
+        .env("METRIX_RENDER", "ascii")
         .arg("price")
         .output()
         .unwrap();
@@ -297,7 +395,7 @@ fn test_price_ascii_render() {
 
 #[test]
 fn test_price_locale_en_override() {
-    let output = ds_check()
+    let output = metrix()
         .arg("price")
         .arg("--locale")
         .arg("en_US")
@@ -310,7 +408,7 @@ fn test_price_locale_en_override() {
 
 #[test]
 fn test_usage_json_with_model_filter() {
-    let output = ds_check()
+    let output = metrix()
         .arg("usage")
         .arg("--json")
         .arg("--model")
